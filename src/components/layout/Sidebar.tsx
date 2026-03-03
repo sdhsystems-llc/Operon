@@ -6,11 +6,12 @@ import {
   Bot,
   Plug,
   BookOpen,
+  MessageSquare,
   Settings,
   Zap,
   ChevronRight,
 } from 'lucide-react'
-import { useAuth } from '../../context/AuthContext'
+import { useAuth } from '../../contexts/AuthContext'
 
 const navItems = [
   { to: '/', icon: LayoutDashboard, label: 'Dashboard', end: true },
@@ -19,6 +20,7 @@ const navItems = [
   { to: '/agents', icon: Bot, label: 'Agents' },
   { to: '/integrations', icon: Plug, label: 'Integrations' },
   { to: '/knowledge', icon: BookOpen, label: 'Knowledge' },
+  { to: '/chat', icon: MessageSquare, label: 'AI Chat' },
 ]
 
 export default function Sidebar() {

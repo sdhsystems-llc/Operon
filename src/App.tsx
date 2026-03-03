@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
-import { AuthProvider, useAuth } from './context/AuthContext'
+import { AuthProvider, useAuth } from './contexts/AuthContext'
 import AppLayout from './components/layout/AppLayout'
 import LoginPage from './pages/auth/LoginPage'
 import RegisterPage from './pages/auth/RegisterPage'
@@ -9,6 +9,7 @@ import InvestigationsPage from './pages/InvestigationsPage'
 import AgentsPage from './pages/AgentsPage'
 import IntegrationsPage from './pages/IntegrationsPage'
 import KnowledgePage from './pages/KnowledgePage'
+import ChatPage from './pages/ChatPage'
 import SettingsPage from './pages/SettingsPage'
 
 function ProtectedRoutes() {
@@ -33,6 +34,8 @@ function ProtectedRoutes() {
         <Route path="/agents" element={<AgentsPage />} />
         <Route path="/integrations" element={<IntegrationsPage />} />
         <Route path="/knowledge" element={<KnowledgePage />} />
+        <Route path="/chat" element={<ChatPage />} />
+        <Route path="/chat/:sessionId" element={<ChatPage />} />
         <Route path="/settings" element={<SettingsPage />} />
       </Route>
     </Routes>
