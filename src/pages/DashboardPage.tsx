@@ -3,7 +3,15 @@ import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import type { Investigation, Agent, Project } from '../types/database'
 import { TriangleAlert as AlertTriangle, Bot, FolderOpen, Activity, ArrowRight } from 'lucide-react'
-import { formatDistanceToNow } from 'date-fns'
+function timeAgo(dateStr: string) {
+  const diff = Date.now() - new Date(dateStr).getTime()
+  const mins = Math.floor(diff / 60000)
+  if (mins < 1) return 'just now'
+  if (mins < 60) return `${mins}m ago`
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 24) return `${hrs}h ago`
+  return `${Math.floor(hrs / 24)}d ago`
+}
 
 function StatCard({ label, value, icon: Icon, color }: { label: string; value: number | string; icon: React.ElementType; color: string }) {
   return (
@@ -86,7 +94,7 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2">
           <div className="card">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-800">
+            <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid var(--border)' }}>
               <h2 className="text-sm font-medium text-white">Recent Investigations</h2>
               <Link to="/investigations" className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1">
                 View all <ArrowRight className="w-3 h-3" />
@@ -94,11 +102,14 @@ export default function DashboardPage() {
             </div>
             <div className="divide-y divide-gray-800">
               {investigations.map(inv => (
-                <div key={inv.id} className="px-5 py-3.5 hover:bg-gray-800/40 transition-colors">
+                <div key={inv.id} className="px-5 py-3.5 transition-colors" style={{ borderColor: 'var(--border)' }}
+                  onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--hover-overlay)')}
+                  onMouseLeave={e => (e.currentTarget.style.backgroundColor = '')}
+                >
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
                       <p className="text-sm text-gray-200 truncate">{inv.title}</p>
-                      <p className="text-xs text-gray-500 mt-0.5">{inv.service} · {formatDistanceToNow(new Date(inv.created_at!), { addSuffix: true })}</p>
+                      <p className="text-xs text-gray-500 mt-0.5">{inv.service} · {timeAgo(inv.created_at!)}</p>
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0">
                       <SeverityBadge severity={inv.severity} />
@@ -113,7 +124,7 @@ export default function DashboardPage() {
 
         <div>
           <div className="card">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-800">
+            <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid var(--border)' }}>
               <h2 className="text-sm font-medium text-white">AI Agents</h2>
               <Link to="/agents" className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1">
                 View all <ArrowRight className="w-3 h-3" />

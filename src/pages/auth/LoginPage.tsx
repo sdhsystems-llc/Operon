@@ -24,22 +24,22 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-950 flex items-center justify-center p-4">
+    <div className="min-h-screen flex items-center justify-center p-4" style={{ backgroundColor: 'var(--bg-base)' }}>
       <div className="w-full max-w-sm">
         <div className="flex items-center gap-2 justify-center mb-8">
-          <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+          <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center">
             <Zap className="w-4 h-4 text-white" />
           </div>
-          <span className="text-xl font-semibold text-white">Operon</span>
+          <span className="text-xl font-semibold" style={{ color: 'var(--text-primary)' }}>Operon</span>
         </div>
 
         <div className="card p-6">
-          <h1 className="text-lg font-semibold text-white mb-1">Welcome back</h1>
-          <p className="text-sm text-gray-400 mb-6">Sign in to your account</p>
+          <h1 className="text-lg font-semibold mb-1" style={{ color: 'var(--text-primary)' }}>Welcome back</h1>
+          <p className="text-sm mb-6" style={{ color: 'var(--text-secondary)' }}>Sign in to your account</p>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-1.5">Email</label>
+              <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>Email</label>
               <input
                 type="email"
                 className="input"
@@ -50,7 +50,7 @@ export default function LoginPage() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-1.5">Password</label>
+              <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>Password</label>
               <input
                 type="password"
                 className="input"
@@ -71,9 +71,9 @@ export default function LoginPage() {
           </form>
         </div>
 
-        <p className="text-center text-sm text-gray-500 mt-4">
+        <p className="text-center text-sm mt-4" style={{ color: 'var(--text-muted)' }}>
           Don't have an account?{' '}
-          <Link to="/register" className="text-blue-400 hover:text-blue-300">
+          <Link to="/register" style={{ color: 'var(--accent)' }} className="hover:opacity-80">
             Sign up
           </Link>
         </p>

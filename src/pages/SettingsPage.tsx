@@ -44,9 +44,11 @@ export default function SettingsPage() {
               <button
                 key={id}
                 onClick={() => setTab(id)}
-                className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors text-left ${
-                  tab === id ? 'bg-blue-600/15 text-blue-400 font-medium' : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800'
-                }`}
+                className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors text-left"
+                style={tab === id
+                  ? { backgroundColor: 'var(--accent-light)', color: 'var(--accent)', fontWeight: 500 }
+                  : { color: 'var(--text-secondary)' }
+                }
               >
                 <Icon className="w-4 h-4" />
                 {label}
@@ -121,7 +123,10 @@ export default function SettingsPage() {
                     </div>
                     <label className="relative inline-flex items-center cursor-pointer">
                       <input type="checkbox" className="sr-only peer" defaultChecked />
-                      <div className="w-10 h-5 bg-gray-700 rounded-full peer peer-checked:bg-blue-600 after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-5" />
+                      <div className="w-10 h-5 rounded-full peer peer-checked:bg-indigo-600 transition-colors"
+                        style={{ backgroundColor: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
+                        <div className="absolute w-4 h-4 bg-white rounded-full shadow top-0.5 left-0.5 transition-transform peer-checked:translate-x-5" />
+                      </div>
                     </label>
                   </div>
                 ))}

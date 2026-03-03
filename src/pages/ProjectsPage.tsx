@@ -51,9 +51,11 @@ export default function ProjectsPage() {
           <button
             key={env}
             onClick={() => setFilter(env)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-              filter === env ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-400 hover:text-gray-200'
-            }`}
+            className="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
+            style={filter === env
+              ? { backgroundColor: 'var(--accent)', color: '#ffffff' }
+              : { backgroundColor: 'var(--bg-elevated)', color: 'var(--text-secondary)' }
+            }
           >
             {env.charAt(0).toUpperCase() + env.slice(1)}
           </button>
@@ -66,7 +68,7 @@ export default function ProjectsPage() {
           return (
             <div key={project.id} className="card p-5 hover:border-gray-700 transition-colors group">
               <div className="flex items-start justify-between mb-3">
-                <div className="w-9 h-9 bg-gray-800 rounded-lg flex items-center justify-center">
+                <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ backgroundColor: 'var(--bg-elevated)' }}>
                   <FolderOpen className="w-4.5 h-4.5 text-blue-400" />
                 </div>
                 <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${envColors[project.environment]}`}>
@@ -86,7 +88,7 @@ export default function ProjectsPage() {
                 </div>
               )}
 
-              <div className="space-y-1.5 pt-3 border-t border-gray-800">
+              <div className="space-y-1.5 pt-3" style={{ borderTop: '1px solid var(--border)' }}>
                 {project.service_url && (
                   <div className="flex items-center gap-2 text-xs text-gray-500">
                     <Globe className="w-3.5 h-3.5 flex-shrink-0" />

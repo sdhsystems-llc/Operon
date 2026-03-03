@@ -1,8 +1,19 @@
 import { useEffect, useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import type { Investigation, Project } from '../types/database'
-import { formatDistanceToNow } from 'date-fns'
-import { Search, Filter } from 'lucide-react'
+import type { Investigation } from '../types/database'
+import { MOCK_INVESTIGATIONS } from '../lib/mockData'
+import { Search, Filter, Plus } from 'lucide-react'
+
+function timeAgo(dateStr: string) {
+  const diff = Date.now() - new Date(dateStr).getTime()
+  const mins = Math.floor(diff / 60000)
+  if (mins < 1) return 'just now'
+  if (mins < 60) return `${mins}m ago`
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 24) return `${hrs}h ago`
+  return `${Math.floor(hrs / 24)}d ago`
+}
 
 function SeverityBadge({ s }: { s: string }) {
   const m: Record<string, string> = { p1: 'badge-p1', p2: 'badge-p2', p3: 'badge-p3', p4: 'badge-p4' }
@@ -14,26 +25,29 @@ function StatusBadge({ s }: { s: string }) {
   return <span className={m[s] ?? 'badge-open'}>{s}</span>
 }
 
+const PROJECT_NAMES: Record<string, string> = {
+  checkout: 'Checkout Service', catalog: 'Product Catalog', cart: 'Cart API',
+  payment: 'Payment Gateway', auth: 'Auth Service', gateway: 'API Gateway',
+  lb: 'Load Balancer', pipeline: 'Data Pipeline', analytics: 'Analytics API',
+}
+
 export default function InvestigationsPage() {
+  const navigate = useNavigate()
   const [investigations, setInvestigations] = useState<Investigation[]>([])
-  const [projects, setProjects] = useState<Pick<Project, 'id' | 'name'>[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [severityFilter, setSeverityFilter] = useState('all')
 
   useEffect(() => {
-    Promise.all([
-      supabase.from('investigations').select('*').order('created_at', { ascending: false }),
-      supabase.from('projects').select('id, name'),
-    ]).then(([inv, proj]) => {
-      setInvestigations(inv.data ?? [])
-      setProjects(proj.data ?? [])
-      setLoading(false)
-    })
+    supabase.from('investigations').select('*').order('created_at', { ascending: false })
+      .then(({ data }) => {
+        setInvestigations((data && data.length > 0 ? data : MOCK_INVESTIGATIONS) as unknown as Investigation[])
+        setLoading(false)
+      })
   }, [])
 
-  const projectName = (id: string) => projects.find(p => p.id === id)?.name ?? '—'
+  const projectName = (id: string) => PROJECT_NAMES[id] ?? id
 
   const filtered = investigations.filter(inv => {
     const matchSearch = inv.title.toLowerCase().includes(search.toLowerCase()) || inv.service.toLowerCase().includes(search.toLowerCase())
@@ -46,9 +60,15 @@ export default function InvestigationsPage() {
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
-      <div className="mb-6">
-        <h1 className="text-xl font-semibold text-white">Investigations</h1>
-        <p className="text-sm text-gray-400 mt-0.5">{investigations.length} total incidents tracked</p>
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-xl font-semibold text-white">Investigations</h1>
+          <p className="text-sm text-gray-400 mt-0.5">{investigations.length} total incidents tracked</p>
+        </div>
+        <Link to="/investigations/new" className="btn-primary">
+          <Plus className="w-4 h-4" />
+          New Investigation
+        </Link>
       </div>
 
       <div className="flex flex-wrap gap-3 mb-5">
@@ -102,7 +122,11 @@ export default function InvestigationsPage() {
           </thead>
           <tbody className="divide-y divide-gray-800">
             {filtered.map(inv => (
-              <tr key={inv.id} className="hover:bg-gray-800/40 transition-colors cursor-pointer">
+              <tr key={inv.id} className="transition-colors cursor-pointer"
+                onClick={() => navigate(`/investigations/${inv.id}`)}
+                onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--hover-overlay)')}
+                onMouseLeave={e => (e.currentTarget.style.backgroundColor = '')}
+              >
                 <td className="px-5 py-3.5">
                   <div>
                     <p className="text-gray-200 font-medium">{inv.title}</p>
@@ -114,7 +138,7 @@ export default function InvestigationsPage() {
                 <td className="px-5 py-3.5"><StatusBadge s={inv.status} /></td>
                 <td className="px-5 py-3.5 text-gray-400 text-xs">{inv.assigned_agent ?? '—'}</td>
                 <td className="px-5 py-3.5 text-gray-400 text-xs">
-                  {inv.created_at ? formatDistanceToNow(new Date(inv.created_at), { addSuffix: true }) : '—'}
+                  {inv.created_at ? timeAgo(inv.created_at) : '—'}
                 </td>
               </tr>
             ))}
