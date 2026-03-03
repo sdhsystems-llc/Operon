@@ -5,7 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { getAIResponse } from '../lib/aiResponses';
 import type { ChatSession, ChatMessage } from '../types/database';
 import { formatDistanceToNow, format } from 'date-fns';
-import { Send, Bot, User, Plus, Trash2, MessageSquare, ChevronLeft, Database, Activity, BarChart3, Cloud, AlertTriangle, Loader2, Copy, Check, Sparkles } from 'lucide-react';
+import { Send, Bot, User, Plus, Trash2, MessageSquare, ChevronLeft, Database, Activity, ChartBar as BarChart3, Cloud, TriangleAlert as AlertTriangle, Loader as Loader2, Copy, Check, Sparkles } from 'lucide-react';
 
 interface StreamingMessage {
   id: string;
