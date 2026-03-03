@@ -12,7 +12,7 @@ import KnowledgePage from './pages/KnowledgePage'
 import ChatPage from './pages/ChatPage'
 import SettingsPage from './pages/SettingsPage'
 
-function ProtectedRoutes() {
+function AppRoutes() {
   const { session, loading } = useAuth()
 
   if (loading) {
@@ -23,7 +23,15 @@ function ProtectedRoutes() {
     )
   }
 
-  if (!session) return <Navigate to="/login" replace />
+  if (!session) {
+    return (
+      <Routes>
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/register" element={<RegisterPage />} />
+        <Route path="*" element={<Navigate to="/login" replace />} />
+      </Routes>
+    )
+  }
 
   return (
     <Routes>
@@ -37,32 +45,8 @@ function ProtectedRoutes() {
         <Route path="/chat" element={<ChatPage />} />
         <Route path="/chat/:sessionId" element={<ChatPage />} />
         <Route path="/settings" element={<SettingsPage />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
-    </Routes>
-  )
-}
-
-function PublicRoutes() {
-  const { session, loading } = useAuth()
-
-  if (loading) return null
-  if (session) return <Navigate to="/" replace />
-
-  return (
-    <Routes>
-      <Route path="/login" element={<LoginPage />} />
-      <Route path="/register" element={<RegisterPage />} />
-      <Route path="*" element={<Navigate to="/login" replace />} />
-    </Routes>
-  )
-}
-
-function AppRoutes() {
-  return (
-    <Routes>
-      <Route path="/login" element={<PublicRoutes />} />
-      <Route path="/register" element={<PublicRoutes />} />
-      <Route path="*" element={<ProtectedRoutes />} />
     </Routes>
   )
 }
