@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import type { Investigation, Agent, Project } from '../types/database'
-import { AlertTriangle, Bot, FolderOpen, Activity, ArrowRight } from 'lucide-react'
+import { TriangleAlert as AlertTriangle, Bot, FolderOpen, Activity, ArrowRight } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 
 function StatCard({ label, value, icon: Icon, color }: { label: string; value: number | string; icon: React.ElementType; color: string }) {

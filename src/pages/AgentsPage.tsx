@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import type { Agent } from '../types/database'
-import { Bot, CheckCircle, Clock, Cpu } from 'lucide-react'
+import { Bot, CircleCheck as CheckCircle, Clock, Cpu } from 'lucide-react'
 
 const typeIcon: Record<string, string> = {
   monitor: '👁',
