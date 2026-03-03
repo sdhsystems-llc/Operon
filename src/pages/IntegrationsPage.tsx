@@ -1,7 +1,15 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import type { Integration } from '../types/database'
-import { formatDistanceToNow } from 'date-fns'
+function timeAgo(dateStr: string) {
+  const diff = Date.now() - new Date(dateStr).getTime()
+  const mins = Math.floor(diff / 60000)
+  if (mins < 1) return 'just now'
+  if (mins < 60) return `${mins}m ago`
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 24) return `${hrs}h ago`
+  return `${Math.floor(hrs / 24)}d ago`
+}
 import { Plug, RefreshCw, Plus } from 'lucide-react'
 
 const integrationIcons: Record<string, string> = {
@@ -52,7 +60,7 @@ export default function IntegrationsPage() {
           <div key={integration.id} className="card p-5 hover:border-gray-700 transition-colors">
             <div className="flex items-start justify-between mb-4">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-gray-800 rounded-xl flex items-center justify-center text-lg">
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center text-lg" style={{ backgroundColor: 'var(--bg-elevated)' }}>
                   {integrationIcons[integration.type] ?? '🔌'}
                 </div>
                 <div>
@@ -69,7 +77,7 @@ export default function IntegrationsPage() {
             {integration.last_sync_at && (
               <div className="flex items-center gap-1.5 text-xs text-gray-500 mb-3">
                 <RefreshCw className="w-3.5 h-3.5" />
-                <span>Synced {formatDistanceToNow(new Date(integration.last_sync_at), { addSuffix: true })}</span>
+                <span>Synced {timeAgo(integration.last_sync_at)}</span>
               </div>
             )}
 
@@ -81,7 +89,7 @@ export default function IntegrationsPage() {
                     className={`px-2 py-0.5 rounded text-xs border ${
                       enabled
                         ? 'bg-emerald-900/30 text-emerald-400 border-emerald-800/50'
-                        : 'bg-gray-800 text-gray-600 border-gray-700'
+                        : 'text-gray-500 border-gray-700'
                     }`}
                   >
                     {key}

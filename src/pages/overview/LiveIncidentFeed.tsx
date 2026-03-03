@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { RefreshCw, ExternalLink } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import type { Investigation } from '../../types/database.types';
+import { MOCK_INVESTIGATIONS } from '../../lib/mockData';
 
 const SEV: Record<string, { label: string; color: string; bg: string; border: string }> = {
   p1: { label: 'P1', color: '#f87171', bg: 'rgba(239,68,68,0.12)', border: 'rgba(239,68,68,0.25)' },
@@ -42,7 +43,7 @@ export const LiveIncidentFeed = () => {
       .select('*')
       .order('created_at', { ascending: false })
       .limit(10);
-    setIncidents(data ?? []);
+    setIncidents((data && data.length > 0 ? data : MOCK_INVESTIGATIONS.slice(0, 10)) as unknown as Investigation[]);
     setLastUpdated(new Date());
     setLoading(false);
     setRefreshing(false);

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
+import { MOCK_INVESTIGATIONS } from '../lib/mockData';
 import { KpiCards } from './overview/KpiCards';
 import { InvestigationsTrendChart } from './overview/InvestigationsTrendChart';
 import { IncidentsByServiceChart } from './overview/IncidentsByServiceChart';
@@ -49,7 +50,7 @@ export const OverviewPage = () => {
         .select('*')
         .order('created_at', { ascending: false });
 
-      setAllInvestigations(data ?? []);
+      setAllInvestigations((data && data.length > 0 ? data : MOCK_INVESTIGATIONS) as any);
       setLoading(false);
     };
     load();
@@ -70,7 +71,7 @@ export const OverviewPage = () => {
   const serviceBuckets = buildServiceBuckets(allInvestigations);
 
   return (
-    <div className="max-w-7xl mx-auto space-y-6">
+    <div className="p-6 max-w-7xl mx-auto space-y-6">
       <div>
         <h1 className="text-2xl font-semibold" style={{ color: 'var(--text-primary)' }}>Overview</h1>
         <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>

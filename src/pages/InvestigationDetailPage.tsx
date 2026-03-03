@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import type { Investigation, InvestigationEvent } from '../types/database.types';
+import { MOCK_INVESTIGATIONS, MOCK_EVENTS, MOCK_CONFIDENCE, MOCK_REMEDIATIONS } from '../lib/mockData';
 import { Breadcrumb } from '../components/Breadcrumb';
 import { Skeleton } from '../components/Skeleton';
 import {
@@ -41,7 +42,7 @@ const REMEDIATIONS: Record<string, { title: string; description: string; command
 };
 
 const getDefaultRemediations = (service: string) =>
-  REMEDIATIONS[service] || [
+  MOCK_REMEDIATIONS[service] || REMEDIATIONS[service] || [
     { title: 'Restart Service', description: `Perform a rolling restart of ${service} to clear transient errors.`, command: `kubectl rollout restart deployment/${service} -n production`, risk: 'low' as const },
     { title: 'Check Recent Deployments', description: 'Review recent deployments to identify potential regression.', risk: 'low' as const },
     { title: 'Scale Horizontally', description: `Add more replicas to ${service} to distribute load.`, command: `kubectl scale deployment/${service} --replicas=5 -n production`, risk: 'low' as const },
@@ -85,6 +86,8 @@ const CONFIDENCE_MAP: Record<string, number> = {
   'postgres-primary': 94, 'checkout-api': 87, 'payment-gateway': 91, 'redis-cache': 78,
   'api-gateway': 85, 'graphql-api': 82, 'fraud-detection': 96, 'load-balancer': 89,
   'webhook-service': 73, 'cdn-service': 88, 'elasticsearch': 76, 'payment-validator': 71,
+  // aligned with mock investigation IDs
+  ...MOCK_CONFIDENCE,
 };
 
 const formatDuration = (minutes: number | null) => {
@@ -110,8 +113,11 @@ export const InvestigationDetailPage = () => {
         supabase.from('investigations').select('*').eq('id', id).maybeSingle(),
         supabase.from('investigation_events').select('*').eq('investigation_id', id).order('timestamp', { ascending: true }),
       ]);
-      setInvestigation(invRes.data ?? null);
-      setEvents(eventsRes.data ?? []);
+      // Fall back to mock data if Supabase returns nothing
+      const inv = invRes.data ?? MOCK_INVESTIGATIONS.find(m => m.id === id) ?? null;
+      const evs = (eventsRes.data && eventsRes.data.length > 0) ? eventsRes.data : (MOCK_EVENTS[id] ?? []);
+      setInvestigation(inv as unknown as Investigation);
+      setEvents(evs as unknown as InvestigationEvent[]);
       setLoading(false);
     };
     loadAll();
@@ -126,7 +132,7 @@ export const InvestigationDetailPage = () => {
 
   if (loading) {
     return (
-      <div className="max-w-7xl mx-auto space-y-5">
+      <div className="p-6 max-w-7xl mx-auto space-y-5">
         <Breadcrumb crumbs={[{ label: 'Dashboard', to: '/' }, { label: 'Investigations', to: '/investigations' }, { label: '...' }]} />
         <div className="card p-6 space-y-4">
           <Skeleton className="h-6 w-48" />
@@ -142,7 +148,7 @@ export const InvestigationDetailPage = () => {
 
   if (!investigation) {
     return (
-      <div className="max-w-7xl mx-auto text-center py-16">
+      <div className="p-6 max-w-7xl mx-auto text-center py-16">
         <AlertCircle className="mx-auto h-12 w-12" style={{ color: 'var(--text-muted)' }} />
         <h3 className="mt-4 text-lg font-medium" style={{ color: 'var(--text-primary)' }}>Investigation not found</h3>
         <a href="/investigations" className="mt-4 btn-primary inline-flex">Back to Investigations</a>
@@ -165,7 +171,7 @@ export const InvestigationDetailPage = () => {
   ].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 
   return (
-    <div className="max-w-7xl mx-auto space-y-5">
+    <div className="p-6 max-w-7xl mx-auto space-y-5">
       <Breadcrumb crumbs={[
         { label: 'Dashboard', to: '/' },
         { label: 'Investigations', to: '/investigations' },
