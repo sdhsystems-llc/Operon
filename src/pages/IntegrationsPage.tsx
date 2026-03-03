@@ -1,191 +1,104 @@
-import { useEffect, useState } from 'react';
-import { AnimatePresence } from 'framer-motion';
-import { supabase } from '../lib/supabase';
-import { useAuth } from '../contexts/AuthContext';
-import { Breadcrumb } from '../components/Breadcrumb';
-import { IntegrationCard } from './integrations/IntegrationCard';
-import { ConfigurePanel } from './integrations/ConfigurePanel';
-import { PROVIDERS } from './integrations/providerConfig';
-import type { Provider, DataSourceKey } from './integrations/providerConfig';
-import { Activity, Zap, RefreshCw, Clock } from 'lucide-react';
+import { useEffect, useState } from 'react'
+import { supabase } from '../lib/supabase'
+import type { Integration } from '../types/database'
+import { formatDistanceToNow } from 'date-fns'
+import { Plug, RefreshCw, Plus } from 'lucide-react'
 
-interface IntegrationRow {
-  id: string;
-  type: string;
-  name: string;
-  status: string;
-  last_sync_at: string | null;
-  events_today: number;
-  config: Record<string, any>;
-  data_sources?: Record<DataSourceKey, boolean>;
+const integrationIcons: Record<string, string> = {
+  aws: '☁️',
+  azure: '🔵',
+  gcp: '🌐',
+  datadog: '🐕',
+  splunk: '🔍',
+  grafana: '📊',
+  pagerduty: '🚨',
+  github: '🐙',
+  launchdarkly: '🚩',
+  slack: '💬',
+  teams: '👥',
+  newrelic: '📈',
 }
 
-const timeAgo = (d: string) => {
-  const diff = Date.now() - new Date(d).getTime();
-  const m = Math.floor(diff / 60000);
-  if (m < 1) return 'just now';
-  if (m < 60) return `${m}m ago`;
-  return `${Math.floor(m / 60)}h ago`;
-};
+export default function IntegrationsPage() {
+  const [integrations, setIntegrations] = useState<Integration[]>([])
+  const [loading, setLoading] = useState(true)
 
-export const IntegrationsPage = () => {
-  const { profile } = useAuth();
-  const [integrations, setIntegrations] = useState<IntegrationRow[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [selectedProvider, setSelectedProvider] = useState<Provider | null>(null);
-  const [panelOpen, setPanelOpen] = useState(false);
+  useEffect(() => {
+    supabase.from('integrations').select('*').order('created_at').then(({ data }) => {
+      setIntegrations(data ?? [])
+      setLoading(false)
+    })
+  }, [])
 
-  useEffect(() => { load(); }, []);
+  const activeCount = integrations.filter(i => i.status === 'active').length
 
-  const load = async () => {
-    const { data } = await supabase.from('integrations').select('*');
-    setIntegrations((data ?? []) as IntegrationRow[]);
-    setLoading(false);
-  };
-
-  const connected = integrations.filter((i) => i.status === 'active');
-  const lastSync = connected
-    .map((i) => i.last_sync_at)
-    .filter(Boolean)
-    .sort()
-    .at(-1);
-  const totalEvents = integrations.reduce((acc, i) => acc + (i.events_today ?? 0), 0);
-
-  const openPanel = (provider: Provider) => {
-    setSelectedProvider(provider);
-    setPanelOpen(true);
-  };
-
-  const closePanel = () => {
-    setPanelOpen(false);
-    setTimeout(() => setSelectedProvider(null), 300);
-  };
-
-  const handleSave = async (
-    providerId: string,
-    credentials: Record<string, string>,
-    dataSources: Record<DataSourceKey, boolean>
-  ) => {
-    const existing = integrations.find((i) => i.type === providerId);
-    const provider = PROVIDERS.find((p) => p.id === providerId);
-    if (!provider) return;
-
-    const payload = {
-      type: providerId,
-      name: provider.name,
-      status: 'active',
-      config: credentials,
-      data_sources: dataSources,
-      last_sync_at: new Date().toISOString(),
-      events_today: existing?.events_today ?? Math.floor(Math.random() * 4800) + 200,
-    };
-
-    if (existing) {
-      await supabase.from('integrations').update(payload).eq('id', existing.id);
-    } else {
-      await supabase.from('integrations').insert({
-        ...payload,
-        org_id: profile?.id,
-      });
-    }
-    await load();
-  };
-
-  const handleDisconnect = async (id: string) => {
-    await supabase.from('integrations').delete().eq('id', id);
-    await load();
-  };
+  if (loading) return <div className="flex items-center justify-center h-full"><div className="text-gray-500 text-sm">Loading...</div></div>
 
   return (
-    <div className="max-w-7xl mx-auto space-y-6">
-      <Breadcrumb crumbs={[{ label: 'Dashboard', to: '/' }, { label: 'Integrations' }]} />
-
-      <div>
-        <h1 className="text-2xl font-semibold" style={{ color: 'var(--text-primary)' }}>Agent Seeding</h1>
-        <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>
-          Connect data sources to enable AI-powered monitoring and root cause analysis
-        </p>
-      </div>
-
-      <div className="rounded-xl p-5 flex flex-col sm:flex-row sm:items-center gap-5"
-        style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
-        <div className="flex items-center gap-3 flex-1">
-          <div className="w-10 h-10 rounded-xl flex items-center justify-center"
-            style={{ background: 'rgba(16,185,129,0.12)', border: '1px solid rgba(16,185,129,0.2)' }}>
-            <Activity className="h-5 w-5" style={{ color: '#34d399' }} />
-          </div>
-          <div>
-            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Connected Providers</p>
-            <p className="text-2xl font-bold tabular-nums" style={{ color: '#34d399' }}>{connected.length}</p>
-          </div>
-          <p className="text-xs self-end mb-0.5" style={{ color: 'var(--text-muted)' }}>of {PROVIDERS.length} available</p>
+    <div className="p-6 max-w-6xl mx-auto">
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-xl font-semibold text-white">Integrations</h1>
+          <p className="text-sm text-gray-400 mt-0.5">{activeCount} connected · {integrations.length} total</p>
         </div>
-
-        <div className="h-px sm:h-12 sm:w-px" style={{ background: 'var(--border)' }} />
-
-        <div className="flex items-center gap-3 flex-1">
-          <div className="w-10 h-10 rounded-xl flex items-center justify-center"
-            style={{ background: 'rgba(99,102,241,0.12)', border: '1px solid rgba(99,102,241,0.2)' }}>
-            <Clock className="h-5 w-5" style={{ color: '#818cf8' }} />
-          </div>
-          <div>
-            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Last Sync</p>
-            <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
-              {lastSync ? timeAgo(lastSync) : '—'}
-            </p>
-          </div>
-        </div>
-
-        <div className="h-px sm:h-12 sm:w-px" style={{ background: 'var(--border)' }} />
-
-        <div className="flex items-center gap-3 flex-1">
-          <div className="w-10 h-10 rounded-xl flex items-center justify-center"
-            style={{ background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.2)' }}>
-            <Zap className="h-5 w-5" style={{ color: '#fbbf24' }} />
-          </div>
-          <div>
-            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Events Today</p>
-            <p className="text-2xl font-bold tabular-nums" style={{ color: '#fbbf24' }}>
-              {totalEvents > 0 ? totalEvents.toLocaleString() : '—'}
-            </p>
-          </div>
-        </div>
-
-        <button onClick={load}
-          className="p-2 rounded-lg transition-colors"
-          style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', color: 'var(--text-muted)' }}
-          onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.borderColor = '#2d3050'; }}
-          onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--border)'; }}>
-          <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+        <button className="btn-primary">
+          <Plus className="w-4 h-4" />
+          Add Integration
         </button>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {PROVIDERS.map((provider) => {
-          const record = integrations.find((i) => i.type === provider.id);
-          return (
-            <IntegrationCard
-              key={provider.id}
-              provider={provider}
-              record={record}
-              onConfigure={() => openPanel(provider)}
-              onDisconnect={handleDisconnect}
-            />
-          );
-        })}
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        {integrations.map(integration => (
+          <div key={integration.id} className="card p-5 hover:border-gray-700 transition-colors">
+            <div className="flex items-start justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-gray-800 rounded-xl flex items-center justify-center text-lg">
+                  {integrationIcons[integration.type] ?? '🔌'}
+                </div>
+                <div>
+                  <h3 className="text-sm font-semibold text-white">{integration.name}</h3>
+                  <p className="text-xs text-gray-500 uppercase tracking-wide">{integration.type}</p>
+                </div>
+              </div>
+              <span className={integration.status === 'active' ? 'badge-active' : 'badge-idle'}>
+                <span className={`w-1.5 h-1.5 rounded-full mr-1.5 inline-block ${integration.status === 'active' ? 'bg-emerald-400' : 'bg-gray-500'}`} />
+                {integration.status}
+              </span>
+            </div>
+
+            {integration.last_sync_at && (
+              <div className="flex items-center gap-1.5 text-xs text-gray-500 mb-3">
+                <RefreshCw className="w-3.5 h-3.5" />
+                <span>Synced {formatDistanceToNow(new Date(integration.last_sync_at), { addSuffix: true })}</span>
+              </div>
+            )}
+
+            {integration.data_sources && (
+              <div className="flex flex-wrap gap-1.5">
+                {Object.entries(integration.data_sources).map(([key, enabled]) => (
+                  <span
+                    key={key}
+                    className={`px-2 py-0.5 rounded text-xs border ${
+                      enabled
+                        ? 'bg-emerald-900/30 text-emerald-400 border-emerald-800/50'
+                        : 'bg-gray-800 text-gray-600 border-gray-700'
+                    }`}
+                  >
+                    {key}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
       </div>
 
-      <AnimatePresence>
-        {panelOpen && selectedProvider && (
-          <ConfigurePanel
-            provider={selectedProvider}
-            existingConfig={integrations.find((i) => i.type === selectedProvider.id)?.config}
-            existingDataSources={integrations.find((i) => i.type === selectedProvider.id)?.data_sources}
-            onClose={closePanel}
-            onSave={handleSave}
-          />
-        )}
-      </AnimatePresence>
+      {integrations.length === 0 && (
+        <div className="flex flex-col items-center justify-center py-16 text-center">
+          <Plug className="w-10 h-10 text-gray-700 mb-3" />
+          <p className="text-gray-500 text-sm">No integrations configured yet.</p>
+        </div>
+      )}
     </div>
-  );
-};
+  )
+}
