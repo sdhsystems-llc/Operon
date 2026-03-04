@@ -8,12 +8,13 @@ import {
   Settings, ArrowRight, Layers, Pencil, Trash2, X,
   ChevronDown as DropdownIcon, Database,
   BookOpen, ExternalLink, Clock, Upload, Link, File, Loader2,
+  Bell, Save,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type HierarchyMode = 'simple' | 'standard' | 'advanced'
-type ProjectTab = 'overview' | 'datasources' | 'agents' | 'components' | 'knowledge'
+type ProjectTab = 'overview' | 'datasources' | 'agents' | 'components' | 'knowledge' | 'notifications'
 type KnowledgeDocType = 'runbook' | 'architecture' | 'postmortem' | 'sop' | 'known-issue' | 'playbook'
 type SourceKind = 'file' | 'confluence' | 'notion' | 'github' | 'google-docs' | 'url' | 'paste' | 'pagerduty' | 'servicenow' | 'sharepoint'
 
@@ -26,6 +27,21 @@ type NodeKind =
   | { cat: 'integration'; categoryId: string; id: string }
   | { cat: 'notif'; id: string }
   | { cat: 'apikeys' }
+
+interface ProjectNotificationConfig {
+  enabled: boolean
+  platform: 'slack' | 'teams' | 'both' | 'inherit'
+  slackChannel: string
+  teamsChannel: string
+  events: {
+    new_investigation: boolean
+    root_cause_identified: boolean
+    remediation_suggested: boolean
+    investigation_resolved: boolean
+    agent_health_alerts: boolean
+  }
+  alertLevels: { p1: boolean; p2: boolean; p3: boolean }
+}
 
 interface ProjectDataSource {
   integrationId: string
@@ -45,6 +61,7 @@ interface Project {
   dataSources: ProjectDataSource[]
   components: Component[]
   knowledge: KnowledgeDoc[]
+  notifications?: ProjectNotificationConfig
 }
 interface Domain {
   id: string; name: string; description: string; owner: string
@@ -79,6 +96,22 @@ const MOCK_ORGS: Org[] = [
     ],
   },
 ]
+
+// Default notification config for new project
+const mkNotifications = (): ProjectNotificationConfig => ({
+  enabled: false,
+  platform: 'inherit',
+  slackChannel: '',
+  teamsChannel: 'Incidents',
+  events: {
+    new_investigation: true,
+    root_cause_identified: true,
+    remediation_suggested: true,
+    investigation_resolved: true,
+    agent_health_alerts: true,
+  },
+  alertLevels: { p1: true, p2: true, p3: false },
+})
 
 // Default data sources for new project
 const mkKnowledge = (): KnowledgeDoc[] => []
@@ -390,10 +423,13 @@ function ProjectPanel({ project, mode, onUpdate }: {
   const [editMode, setEditMode] = useState(false)
   const [form, setForm] = useState({ name: project.name, description: project.description, environment: project.environment, serviceUrl: project.serviceUrl ?? '', repoUrl: project.repoUrl ?? '' })
   const [saved, setSaved] = useState(false)
+  const [notifConfig, setNotifConfig] = useState<ProjectNotificationConfig>(project.notifications ?? mkNotifications())
+  const [notifSaved, setNotifSaved] = useState(false)
 
   // keep form in sync when project changes (e.g. switching between projects)
   useEffect(() => {
     setForm({ name: project.name, description: project.description, environment: project.environment, serviceUrl: project.serviceUrl ?? '', repoUrl: project.repoUrl ?? '' })
+    setNotifConfig(project.notifications ?? mkNotifications())
     setEditMode(false)
     setTab('overview')
   }, [project.id])
@@ -401,6 +437,11 @@ function ProjectPanel({ project, mode, onUpdate }: {
   const saveOverview = () => {
     onUpdate({ ...project, ...form, serviceUrl: form.serviceUrl || undefined, repoUrl: form.repoUrl || undefined })
     setEditMode(false); setSaved(true); setTimeout(() => setSaved(false), 2000)
+  }
+
+  const saveNotifications = () => {
+    onUpdate({ ...project, notifications: notifConfig })
+    setNotifSaved(true); setTimeout(() => setNotifSaved(false), 2000)
   }
 
   const toggleAgent = (agent: string) => {
@@ -441,6 +482,7 @@ function ProjectPanel({ project, mode, onUpdate }: {
     { id: 'datasources' as ProjectTab, label: 'Data Sources', icon: Database, badge: enabledDSCount > 0 ? `${configuredDSCount}/${enabledDSCount}` : undefined },
     { id: 'agents' as ProjectTab, label: 'Agents', icon: Bot, badge: project.agents.length > 0 ? String(project.agents.length) : undefined },
     { id: 'knowledge' as ProjectTab, label: 'Knowledge', icon: BookOpen, badge: project.knowledge.length > 0 ? String(project.knowledge.length) : undefined },
+    { id: 'notifications' as ProjectTab, label: 'Notifications', icon: Bell, badge: notifConfig.enabled ? (notifConfig.platform === 'inherit' ? undefined : notifConfig.platform.toUpperCase()) : undefined },
     ...(mode === 'advanced' ? [{ id: 'components' as ProjectTab, label: 'Components', icon: Layers, badge: project.components.length > 0 ? String(project.components.length) : undefined }] : []),
   ]
 
@@ -610,6 +652,171 @@ function ProjectPanel({ project, mode, onUpdate }: {
       {tab === 'knowledge' && (
         <div className="rounded-xl p-5" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
           <KnowledgeSection docs={project.knowledge} scopeLabel={`${project.name}`} />
+        </div>
+      )}
+
+      {/* Tab: Notifications */}
+      {tab === 'notifications' && (
+        <div className="space-y-4">
+          {/* Info banner */}
+          <div className="p-4 rounded-xl flex items-start gap-3" style={{ background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.2)' }}>
+            <Bell className="h-4 w-4 flex-shrink-0 mt-0.5" style={{ color: 'var(--accent)' }} />
+            <p className="text-xs leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+              Configure project-level alert routing for <strong style={{ color: 'var(--text-primary)' }}>{project.name}</strong>. When enabled, these settings override the team-wide Slack / Teams defaults — so incidents and AI findings for this project land in the right channel automatically.
+            </p>
+          </div>
+
+          {/* Enable / override toggle */}
+          <Slab title="Project-Level Override">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>Override team notifications</p>
+                <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
+                  {notifConfig.enabled ? 'Using project-specific channels below' : 'Currently falling back to team-level notification settings'}
+                </p>
+              </div>
+              <button
+                onClick={() => setNotifConfig(c => ({ ...c, enabled: !c.enabled }))}
+                className="w-11 h-6 rounded-full flex items-center px-0.5 flex-shrink-0 transition-colors"
+                style={{ background: notifConfig.enabled ? 'var(--accent)' : 'var(--bg-surface)', border: '1px solid var(--border)' }}
+              >
+                <div className="w-5 h-5 rounded-full bg-white shadow transition-transform" style={{ transform: notifConfig.enabled ? 'translateX(20px)' : 'translateX(0)' }} />
+              </button>
+            </div>
+          </Slab>
+
+          {notifConfig.enabled && (
+            <>
+              {/* Platform selection */}
+              <Slab title="Notification Platform">
+                <div className="grid grid-cols-2 gap-2">
+                  {([
+                    { value: 'slack', label: 'Slack', emoji: '💬', desc: 'Send to a Slack channel' },
+                    { value: 'teams', label: 'Microsoft Teams', emoji: '🟣', desc: 'Send to a Teams channel' },
+                    { value: 'both', label: 'Both', emoji: '📣', desc: 'Slack + Teams simultaneously' },
+                    { value: 'inherit', label: 'Team Default', emoji: '🔗', desc: 'Use org-level channel settings' },
+                  ] as const).map(opt => (
+                    <button
+                      key={opt.value}
+                      onClick={() => setNotifConfig(c => ({ ...c, platform: opt.value }))}
+                      className="flex items-start gap-2.5 p-3 rounded-xl text-left transition-colors"
+                      style={{
+                        background: notifConfig.platform === opt.value ? 'rgba(99,102,241,0.12)' : 'var(--bg-surface)',
+                        border: `1px solid ${notifConfig.platform === opt.value ? 'rgba(99,102,241,0.4)' : 'var(--border)'}`,
+                      }}
+                    >
+                      <span className="text-lg flex-shrink-0">{opt.emoji}</span>
+                      <div>
+                        <p className="text-xs font-semibold" style={{ color: notifConfig.platform === opt.value ? 'var(--accent)' : 'var(--text-primary)' }}>{opt.label}</p>
+                        <p className="text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>{opt.desc}</p>
+                      </div>
+                      {notifConfig.platform === opt.value && (
+                        <CheckCircle2 className="h-3.5 w-3.5 ml-auto flex-shrink-0 mt-0.5" style={{ color: 'var(--accent)' }} />
+                      )}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Slack channel input */}
+                {(notifConfig.platform === 'slack' || notifConfig.platform === 'both') && (
+                  <div className="mt-4 space-y-1.5">
+                    <label className="block text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>Slack Channel</label>
+                    <input
+                      className="input text-sm font-mono"
+                      value={notifConfig.slackChannel}
+                      onChange={e => setNotifConfig(c => ({ ...c, slackChannel: e.target.value }))}
+                      placeholder={`#${project.name.toLowerCase().replace(/\s+/g, '-')}-alerts`}
+                    />
+                    <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>Include the # prefix. The Operon bot must be invited to this channel.</p>
+                  </div>
+                )}
+
+                {/* Teams channel dropdown */}
+                {(notifConfig.platform === 'teams' || notifConfig.platform === 'both') && (
+                  <div className="mt-4 space-y-1.5">
+                    <label className="block text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>Teams Channel</label>
+                    <select
+                      className="input text-sm"
+                      value={notifConfig.teamsChannel}
+                      onChange={e => setNotifConfig(c => ({ ...c, teamsChannel: e.target.value }))}
+                    >
+                      {['General', 'Incidents', 'Engineering', 'On-Call', 'Alerts', 'DevOps'].map(ch => (
+                        <option key={ch} value={ch}>{ch}</option>
+                      ))}
+                    </select>
+                    <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>Configure the Teams bot in Team Integrations to activate this channel.</p>
+                  </div>
+                )}
+              </Slab>
+
+              {/* Alert severity routing */}
+              <Slab title="Alert Severity">
+                <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Choose which severity levels trigger a notification for this project.</p>
+                <div className="space-y-2 mt-2">
+                  {([
+                    { key: 'p1' as const, label: 'P1 — Critical', desc: 'Production down, immediate action required', color: '#f87171', bg: 'rgba(239,68,68,0.08)' },
+                    { key: 'p2' as const, label: 'P2 — High',     desc: 'Significant degradation affecting users',    color: '#fbbf24', bg: 'rgba(245,158,11,0.08)' },
+                    { key: 'p3' as const, label: 'P3 — Medium',   desc: 'Partial impact, monitoring closely',          color: '#818cf8', bg: 'rgba(99,102,241,0.08)' },
+                  ]).map(sev => (
+                    <div key={sev.key} className="flex items-center justify-between px-3 py-2.5 rounded-lg" style={{ background: notifConfig.alertLevels[sev.key] ? sev.bg : 'var(--bg-surface)', border: `1px solid ${notifConfig.alertLevels[sev.key] ? sev.color + '44' : 'var(--border)'}` }}>
+                      <div className="flex items-center gap-2.5">
+                        <span className="text-xs font-bold px-2 py-0.5 rounded" style={{ background: sev.bg, color: sev.color }}>{sev.key.toUpperCase()}</span>
+                        <div>
+                          <p className="text-xs font-medium" style={{ color: 'var(--text-primary)' }}>{sev.label}</p>
+                          <p className="text-[10px]" style={{ color: 'var(--text-muted)' }}>{sev.desc}</p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => setNotifConfig(c => ({ ...c, alertLevels: { ...c.alertLevels, [sev.key]: !c.alertLevels[sev.key] } }))}
+                        className="w-9 h-5 rounded-full flex items-center px-0.5 flex-shrink-0 transition-colors"
+                        style={{ background: notifConfig.alertLevels[sev.key] ? sev.color : 'var(--bg-elevated)', border: '1px solid var(--border)' }}
+                      >
+                        <div className="w-4 h-4 rounded-full bg-white shadow transition-transform" style={{ transform: notifConfig.alertLevels[sev.key] ? 'translateX(16px)' : 'translateX(0)' }} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </Slab>
+
+              {/* Notification events */}
+              <Slab title="Notification Events">
+                <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Choose which AI agent events send an alert for this project.</p>
+                <div className="space-y-2 mt-2">
+                  {([
+                    { key: 'new_investigation'     as const, label: 'New Investigation Started',  desc: 'When an AI agent begins investigating an incident' },
+                    { key: 'root_cause_identified' as const, label: 'Root Cause Identified',      desc: 'When the AI pinpoints the root cause' },
+                    { key: 'remediation_suggested' as const, label: 'Remediation Suggested',      desc: 'When an automated fix or recommendation is ready' },
+                    { key: 'investigation_resolved' as const, label: 'Investigation Resolved',    desc: 'When the incident is closed or marked resolved' },
+                    { key: 'agent_health_alerts'   as const, label: 'Agent Health Alerts',        desc: 'When an assigned AI agent becomes unavailable' },
+                  ]).map(ev => {
+                    const on = notifConfig.events[ev.key]
+                    return (
+                      <div key={ev.key} className="flex items-center justify-between px-3 py-2.5 rounded-lg" style={{ background: on ? 'rgba(99,102,241,0.06)' : 'var(--bg-surface)', border: `1px solid ${on ? 'rgba(99,102,241,0.2)' : 'var(--border)'}` }}>
+                        <div>
+                          <p className="text-xs font-medium" style={{ color: 'var(--text-primary)' }}>{ev.label}</p>
+                          <p className="text-[10px]" style={{ color: 'var(--text-muted)' }}>{ev.desc}</p>
+                        </div>
+                        <button
+                          onClick={() => setNotifConfig(c => ({ ...c, events: { ...c.events, [ev.key]: !c.events[ev.key] } }))}
+                          className="w-9 h-5 rounded-full flex items-center px-0.5 flex-shrink-0 transition-colors ml-4"
+                          style={{ background: on ? 'var(--accent)' : 'var(--bg-elevated)', border: '1px solid var(--border)' }}
+                        >
+                          <div className="w-4 h-4 rounded-full bg-white shadow transition-transform" style={{ transform: on ? 'translateX(16px)' : 'translateX(0)' }} />
+                        </button>
+                      </div>
+                    )
+                  })}
+                </div>
+              </Slab>
+            </>
+          )}
+
+          {/* Save */}
+          <div className="flex justify-end">
+            <button onClick={saveNotifications} className="btn-primary flex items-center gap-2 text-sm">
+              {notifSaved ? <><Check className="h-4 w-4" /> Saved</> : <><Save className="h-4 w-4" /> Save Notifications</>}
+            </button>
+          </div>
         </div>
       )}
 
