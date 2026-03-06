@@ -57,7 +57,7 @@ export const LiveIncidentFeed = () => {
 
   return (
     <div className="card">
-      <div className="px-5 py-4 flex items-center justify-between" style={{ borderBottom: '1px solid var(--border)' }}>
+      <div className="px-4 py-2.5 flex items-center justify-between" style={{ borderBottom: '1px solid var(--border)' }}>
         <div>
           <h3 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>Live Incident Feed</h3>
           <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
@@ -99,7 +99,7 @@ export const LiveIncidentFeed = () => {
           No incidents found. System is clear.
         </div>
       ) : (
-        <div className="divide-y max-h-96 overflow-y-auto" style={{ borderColor: 'var(--border)' }}>
+        <div className="divide-y" style={{ borderColor: 'var(--border)' }}>
           {incidents.map((inc) => {
             const sev = SEV[inc.severity] ?? SEV.p4;
             const sts = STS[inc.status] ?? STS.open;
@@ -107,7 +107,8 @@ export const LiveIncidentFeed = () => {
               <Link
                 key={inc.id}
                 to={`/investigations/${inc.id}`}
-                className="flex items-start gap-3 px-5 py-3.5 transition-colors group"
+                state={{ from: { label: 'Overview', to: '/' } }}
+                className="flex items-start gap-3 px-4 py-2 transition-colors group"
                 onMouseEnter={(e) => { (e.currentTarget as HTMLAnchorElement).style.background = 'var(--bg-elevated)'; }}
                 onMouseLeave={(e) => { (e.currentTarget as HTMLAnchorElement).style.background = 'transparent'; }}
               >

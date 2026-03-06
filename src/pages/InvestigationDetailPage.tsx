@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useLocation } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import type { Investigation, InvestigationEvent } from '../types/database.types';
 import { MOCK_INVESTIGATIONS, MOCK_EVENTS, MOCK_CONFIDENCE, MOCK_REMEDIATIONS } from '../lib/mockData';
@@ -100,6 +100,8 @@ const formatDuration = (minutes: number | null) => {
 
 export const InvestigationDetailPage = () => {
   const { id } = useParams<{ id: string }>();
+  const location = useLocation();
+  const from: { label: string; to: string } = (location.state as any)?.from ?? { label: 'Investigations', to: '/investigations' };
   const [investigation, setInvestigation] = useState<Investigation | null>(null);
   const [events, setEvents] = useState<InvestigationEvent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -132,8 +134,8 @@ export const InvestigationDetailPage = () => {
 
   if (loading) {
     return (
-      <div className="p-6 max-w-7xl mx-auto space-y-5">
-        <Breadcrumb crumbs={[{ label: 'Dashboard', to: '/' }, { label: 'Investigations', to: '/investigations' }, { label: '...' }]} />
+      <div className="p-6 space-y-5">
+        <Breadcrumb crumbs={[{ label: from.label, to: from.to }, { label: '...' }]} />
         <div className="card p-6 space-y-4">
           <Skeleton className="h-6 w-48" />
           <Skeleton className="h-8 w-3/4" />
@@ -171,10 +173,10 @@ export const InvestigationDetailPage = () => {
   ].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-5">
+    <div className="h-full overflow-y-auto">
+    <div className="p-6 space-y-5">
       <Breadcrumb crumbs={[
-        { label: 'Dashboard', to: '/' },
-        { label: 'Investigations', to: '/investigations' },
+        { label: from.label, to: from.to },
         { label: investigation.title.length > 40 ? investigation.title.slice(0, 40) + '…' : investigation.title },
       ]} />
 
@@ -476,6 +478,7 @@ export const InvestigationDetailPage = () => {
           </div>
         </div>
       </div>
+    </div>
     </div>
   );
 };

@@ -3,7 +3,10 @@ import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import type { Investigation } from '../types/database'
 import { MOCK_INVESTIGATIONS } from '../lib/mockData'
-import { Search, Filter, Plus } from 'lucide-react'
+import { Search, Filter, Plus, FileText, Loader2, Download } from 'lucide-react'
+import { useReports } from '../context/ReportContext'
+import { ReportModal } from '../components/layout/ReportModal'
+import type { ReportJob } from '../context/ReportContext'
 
 function timeAgo(dateStr: string) {
   const diff = Date.now() - new Date(dateStr).getTime()
@@ -33,6 +36,8 @@ const PROJECT_NAMES: Record<string, string> = {
 
 export default function InvestigationsPage() {
   const navigate = useNavigate()
+  const { startReport, isGenerating, jobs } = useReports()
+  const [viewingJob, setViewingJob] = useState<ReportJob | null>(null)
   const [investigations, setInvestigations] = useState<Investigation[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -59,7 +64,9 @@ export default function InvestigationsPage() {
   if (loading) return <div className="flex items-center justify-center h-full"><div className="text-gray-500 text-sm">Loading...</div></div>
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
+    <>
+    <div className="h-full overflow-y-auto">
+    <div className="p-6 w-full">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-xl font-semibold text-white">Investigations</h1>
@@ -118,12 +125,13 @@ export default function InvestigationsPage() {
               <th className="text-left px-5 py-3 text-xs font-medium text-gray-400">Status</th>
               <th className="text-left px-5 py-3 text-xs font-medium text-gray-400">Agent</th>
               <th className="text-left px-5 py-3 text-xs font-medium text-gray-400">Opened</th>
+              <th className="text-left px-5 py-3 text-xs font-medium text-gray-400">Report</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-800">
             {filtered.map(inv => (
               <tr key={inv.id} className="transition-colors cursor-pointer"
-                onClick={() => navigate(`/investigations/${inv.id}`)}
+                onClick={() => navigate(`/investigations/${inv.id}`, { state: { from: { label: 'Investigations', to: '/investigations' } } })}
                 onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--hover-overlay)')}
                 onMouseLeave={e => (e.currentTarget.style.backgroundColor = '')}
               >
@@ -140,6 +148,59 @@ export default function InvestigationsPage() {
                 <td className="px-5 py-3.5 text-gray-400 text-xs">
                   {inv.created_at ? timeAgo(inv.created_at) : '—'}
                 </td>
+                <td className="px-5 py-3.5" onClick={e => e.stopPropagation()}>
+                  {(() => {
+                    const generating = isGenerating(inv.id)
+                    const done = jobs.find(j => j.id === inv.id && j.status === 'done')
+                    if (done) return (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
+                        <button onClick={() => setViewingJob(done)} style={{
+                          display: 'flex', alignItems: 'center', gap: '0.3rem',
+                          padding: '0.3rem 0.625rem', borderRadius: 6,
+                          border: '1px solid rgba(34,197,94,0.35)',
+                          background: 'rgba(34,197,94,0.1)', color: '#22c55e',
+                          cursor: 'pointer', fontSize: '0.72rem', fontWeight: 700,
+                        }}>
+                          <FileText size={11} /> View
+                        </button>
+                        <button onClick={() => {
+                          const blob = new Blob([done.reportHtml ?? ''], { type: 'text/html' })
+                          const a = document.createElement('a'); a.href = URL.createObjectURL(blob)
+                          a.download = `report-${done.id}.html`; a.click()
+                        }} title="Download report" style={{
+                          display: 'flex', alignItems: 'center', padding: '0.3rem', borderRadius: 6,
+                          border: '1px solid #334155', background: 'transparent',
+                          color: '#64748b', cursor: 'pointer',
+                        }}
+                          onMouseOver={e => (e.currentTarget.style.color = '#94a3b8')}
+                          onMouseOut={e => (e.currentTarget.style.color = '#64748b')}
+                        >
+                          <Download size={11} />
+                        </button>
+                      </div>
+                    )
+                    return (
+                      <button
+                        disabled={generating}
+                        onClick={() => startReport({ id: inv.id, title: inv.title, severity: inv.severity, service: inv.service })}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: '0.3rem',
+                          padding: '0.3rem 0.625rem', borderRadius: 6,
+                          border: `1px solid ${generating ? '#334155' : '#4338ca50'}`,
+                          background: generating ? 'transparent' : 'rgba(99,102,241,0.08)',
+                          color: generating ? '#475569' : '#818cf8',
+                          cursor: generating ? 'not-allowed' : 'pointer',
+                          fontSize: '0.72rem', fontWeight: 600, whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {generating
+                          ? <><Loader2 size={11} style={{ animation: 'spin 1s linear infinite' }} /> Generating...</>
+                          : <><FileText size={11} /> Generate</>
+                        }
+                      </button>
+                    )
+                  })()}
+                </td>
               </tr>
             ))}
           </tbody>
@@ -149,5 +210,12 @@ export default function InvestigationsPage() {
         )}
       </div>
     </div>
+    </div>
+
+    {viewingJob && viewingJob.reportHtml && (
+      <ReportModal job={viewingJob} onClose={() => setViewingJob(null)} />
+    )}
+    <style>{`@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}`}</style>
+    </>
   )
 }

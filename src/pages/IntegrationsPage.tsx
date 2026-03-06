@@ -43,6 +43,7 @@ export default function IntegrationsPage() {
   if (loading) return <div className="flex items-center justify-center h-full"><div className="text-gray-500 text-sm">Loading...</div></div>
 
   return (
+    <div className="h-full overflow-y-auto">
     <div className="p-6 max-w-6xl mx-auto">
       <div className="flex items-center justify-between mb-6">
         <div>
@@ -107,6 +108,7 @@ export default function IntegrationsPage() {
           <p className="text-gray-500 text-sm">No integrations configured yet.</p>
         </div>
       )}
+    </div>
     </div>
   )
 }

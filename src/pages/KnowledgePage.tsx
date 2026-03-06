@@ -418,7 +418,8 @@ export default function KnowledgePage() {
   }
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
+    <div className="h-full overflow-y-auto">
+    <div className="p-6 w-full">
       {/* Header */}
       <div className="flex items-center justify-between mb-5">
         <div>
@@ -571,6 +572,7 @@ export default function KnowledgePage() {
       </div>
 
       {addOpen && <AddSourceModal onAdd={doc => setDocs(d => [doc, ...d])} onClose={() => setAddOpen(false)} />}
+    </div>
     </div>
   )
 }
