@@ -16,6 +16,8 @@ import KnowledgePage from './pages/KnowledgePage'
 import ChatPage from './pages/ChatPage'
 import SettingsPage from './pages/SettingsPage'
 import { AuditLogPage } from './pages/AuditLogPage'
+import AlertTriagePage from './pages/AlertTriagePage'
+import AnalyticsPage from './pages/AnalyticsPage'
 // Projects section — modular pages
 import OrgsPage from './pages/projects/OrgsPage'
 import OrgDetailPage from './pages/projects/OrgDetailPage'
@@ -56,6 +58,8 @@ function AppRoutes() {
           <Route path="/investigations/new" element={<NewInvestigationPage />} />
           <Route path="/investigations/:id" element={<InvestigationDetailPage />} />
           <Route path="/agents" element={<AgentsPage />} />
+          <Route path="/alerts" element={<AlertTriagePage />} />
+          <Route path="/analytics" element={<AnalyticsPage />} />
           <Route path="/integrations" element={<IntegrationsPage />} />
           <Route path="/knowledge" element={<KnowledgePage />} />
           <Route path="/chat" element={<ChatPage />} />

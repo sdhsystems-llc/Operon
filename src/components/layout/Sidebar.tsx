@@ -3,6 +3,7 @@ import { NavLink } from 'react-router-dom'
 import {
   Search, Bot, BookOpen, MessageSquare, Settings, Zap,
   ChevronRight, LogOut, Activity, Building2, Layers, FolderGit2,
+  Bell, BarChart2,
 } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 
@@ -11,11 +12,13 @@ const EXPANDED_W  = 248
 
 const navItems = [
   { to: '/',               icon: Activity,      label: 'Overview',       end: true },
+  { to: '/alerts',         icon: Bell,          label: 'Alert Triage' },
+  { to: '/investigations', icon: Search,        label: 'Investigations' },
+  { to: '/agents',         icon: Bot,           label: 'Agents' },
+  { to: '/analytics',      icon: BarChart2,     label: 'Analytics' },
   { to: '/orgs',           icon: Building2,     label: 'Organizations' },
   { to: '/domains',        icon: Layers,        label: 'Domains' },
   { to: '/projects',       icon: FolderGit2,    label: 'Projects' },
-  { to: '/investigations', icon: Search,        label: 'Investigations' },
-  { to: '/agents',         icon: Bot,           label: 'Agents' },
   { to: '/knowledge',      icon: BookOpen,      label: 'Knowledge' },
   { to: '/chat',           icon: MessageSquare, label: 'AI Chat' },
 ]
