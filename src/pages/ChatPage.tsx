@@ -1,10 +1,16 @@
-import { useEffect, useState, useRef, useCallback } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
-import { getAIResponse } from '../lib/aiResponses'
+import { matchPipeline, QUICK_PROMPTS } from '../lib/agentPipeline'
+import type { Pipeline } from '../lib/agentPipeline'
+import { InvestigationPipeline } from '../components/chat/InvestigationPipeline'
+import { PastInvestigationCard } from '../components/chat/pipeline/PastInvestigationCard'
 import type { ChatSession, ChatMessage } from '../types/database.types'
-// date-fns v4 removed addSuffix option; use a helper instead
+import {
+  Send, Bot, User, Plus, Trash2, MessageSquare, ChevronLeft, Sparkles,
+} from 'lucide-react'
+
 function timeAgo(dateStr: string) {
   const diff = Date.now() - new Date(dateStr).getTime()
   const mins = Math.floor(diff / 60000)
@@ -14,92 +20,31 @@ function timeAgo(dateStr: string) {
   if (hrs < 24) return `${hrs}h ago`
   return `${Math.floor(hrs / 24)}d ago`
 }
-import {
-  Send, Bot, User, Plus, Trash2, MessageSquare, ChevronLeft,
-  Database, Activity, BarChart3, Cloud, AlertTriangle, Loader2,
-  Copy, Check, Sparkles,
-} from 'lucide-react'
 
-interface StreamingMessage {
-  id: string
-  content: string
-  isComplete: boolean
-  sources?: string[]
-}
-
-const QUICK_PROMPTS = [
-  { label: 'Checkout latency spike',  prompt: 'Why is checkout service experiencing latency spikes?' },
-  { label: 'Root cause analysis',     prompt: 'Identify the root cause of the current incident' },
-  { label: 'Current p99 metrics',     prompt: 'Show me current production metrics and p99 latency' },
-  { label: 'Remediation steps',       prompt: 'What remediation steps do you recommend?' },
-  { label: 'Correlate events',        prompt: 'Correlate events across all integrations in the last 2 hours' },
-  { label: 'Service health',          prompt: 'Check deployment health status across all services' },
-]
-
-function getSourceIcon(source: string) {
-  const lower = source.toLowerCase()
-  if (lower.includes('postgres') || lower.includes('sql') || lower.includes('rds') || lower.includes('redis'))
-    return <Database className="w-3 h-3" />
-  if (lower.includes('datadog') || lower.includes('grafana') || lower.includes('prometheus'))
-    return <BarChart3 className="w-3 h-3" />
-  if (lower.includes('aws') || lower.includes('cloud') || lower.includes('azure'))
-    return <Cloud className="w-3 h-3" />
-  if (lower.includes('pagerduty') || lower.includes('alert'))
-    return <AlertTriangle className="w-3 h-3" />
-  return <Activity className="w-3 h-3" />
-}
-
-function CodeBlock({ lang, code }: { lang: string; code: string }) {
-  const [copied, setCopied] = useState(false)
-  function copy() {
-    navigator.clipboard.writeText(code)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }
+// Stored messages are plain text; only active workflow gets full agentic UI.
+// We mark assistant messages with a special prefix to show them differently.
+function PlainAssistantMsg({ content }: { content: string }) {
+  const parts = content.split('\n')
   return (
-    <div className="my-3 rounded-lg overflow-hidden" style={{ border: '1px solid #374151' }}>
-      <div className="flex items-center justify-between px-4 py-2" style={{ background: '#1f2937', borderBottom: '1px solid #374151' }}>
-        <span className="text-xs font-medium font-mono" style={{ color: '#9ca3af' }}>{lang || 'code'}</span>
-        <button onClick={copy} className="flex items-center gap-1 text-xs transition-colors" style={{ color: copied ? '#34d399' : '#6b7280' }}>
-          {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-          {copied ? 'Copied' : 'Copy'}
-        </button>
-      </div>
-      <pre className="px-4 py-3 overflow-x-auto text-xs leading-relaxed" style={{ background: '#111827' }}>
-        <code className="font-mono whitespace-pre" style={{ color: '#d1d5db' }}>{code}</code>
-      </pre>
-    </div>
-  )
-}
-
-function MessageContent({ content, streaming }: { content: string; streaming?: boolean }) {
-  const parts = content.split(/(```[\s\S]*?```)/g)
-  return (
-    <div className="text-sm leading-relaxed" style={{ color: '#e5e7eb' }}>
-      {parts.map((part, i) => {
-        if (part.startsWith('```') && part.endsWith('```')) {
-          const lines = part.slice(3, -3).split('\n')
-          const lang = lines[0]?.trim() || 'text'
-          const code = lines.slice(1).join('\n').trim()
-          return <CodeBlock key={i} lang={lang} code={code} />
-        }
-        const segs = part.split(/(\*\*[^*]+\*\*)/g)
-        return (
-          <span key={i}>
-            {segs.map((seg, j) => {
-              if (seg.startsWith('**') && seg.endsWith('**'))
-                return <strong key={j} className="font-semibold" style={{ color: '#fff' }}>{seg.slice(2, -2)}</strong>
-              return seg.split('\n').map((line, k, arr) => (
-                <span key={k}>{line}{k < arr.length - 1 && <br />}</span>
-              ))
-            })}
-          </span>
-        )
+    <div style={{ fontSize: '0.8rem', lineHeight: 1.65, color: '#d1d5db' }}>
+      {parts.map((line, i) => {
+        if (line.startsWith('## ')) return <p key={i} style={{ fontWeight: 800, color: '#fff', fontSize: '0.9rem', margin: '0.5rem 0 0.25rem' }}>{line.slice(3)}</p>
+        if (line.startsWith('### ')) return <p key={i} style={{ fontWeight: 700, color: '#e5e7eb', fontSize: '0.83rem', margin: '0.5rem 0 0.125rem' }}>{line.slice(4)}</p>
+        if (line.trim() === '') return <div key={i} style={{ height: '0.25rem' }} />
+        return <p key={i} style={{ margin: '0.1rem 0' }}>{line}</p>
       })}
-      {streaming && <span className="inline-block w-0.5 h-3.5 ml-0.5 align-middle animate-pulse" style={{ background: '#6366f1' }} />}
     </div>
   )
 }
+
+// ─── Pipeline State ───────────────────────────────────────────────────────────
+interface LiveWorkflow {
+  userMsgId: string
+  workflow: Pipeline
+  done: boolean
+}
+// donePipelines: keeps every completed investigation result permanently in the chat
+type DonePipelinesMap = Record<string, Pipeline>
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function ChatPage() {
@@ -112,366 +57,280 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [inputMessage, setInputMessage] = useState('')
   const [loading, setLoading] = useState(false)
-  const [streamingMessage, setStreamingMessage] = useState<StreamingMessage | null>(null)
   const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [liveWorkflow, setLiveWorkflow] = useState<LiveWorkflow | null>(null)
+  const [donePipelines, setDonePipelines] = useState<DonePipelinesMap>({})
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
-  const streamIntervalRef = useRef<number | null>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
-  // Load sessions when user is ready
   useEffect(() => { if (user) loadSessions() }, [user])
-
-  // Load session from URL param
   useEffect(() => { if (sessionId) loadSession(sessionId) }, [sessionId])
-
-  // Scroll to latest message
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages, streamingMessage])
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => { if (streamIntervalRef.current) clearInterval(streamIntervalRef.current) }
-  }, [])
+  useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages, liveWorkflow])
 
   const loadSessions = async () => {
     if (!user) return
-    try {
-      const { data, error } = await supabase
-        .from('chat_sessions')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('updated_at', { ascending: false })
-      if (error) throw error
-      setSessions(data || [])
-    } catch (err) {
-      console.error('Error loading sessions:', err)
-    }
+    const { data } = await supabase.from('chat_sessions').select('*').eq('user_id', user.id).order('updated_at', { ascending: false })
+    setSessions(data || [])
   }
 
   const loadSession = async (id: string) => {
-    try {
-      const { data: sessionData, error: sessionError } = await supabase
-        .from('chat_sessions').select('*').eq('id', id).maybeSingle()
-      if (sessionError) throw sessionError
-      setCurrentSession(sessionData)
-
-      const { data: messagesData, error: messagesError } = await supabase
-        .from('chat_messages').select('*').eq('session_id', id).order('created_at', { ascending: true })
-      if (messagesError) throw messagesError
-      setMessages(messagesData || [])
-    } catch (err) {
-      console.error('Error loading session:', err)
-    }
+    const { data: sd } = await supabase.from('chat_sessions').select('*').eq('id', id).maybeSingle()
+    setCurrentSession(sd)
+    const { data: md } = await supabase.from('chat_messages').select('*').eq('session_id', id).order('created_at', { ascending: true })
+    setMessages(md || [])
+    setLiveWorkflow(null)
+    setDonePipelines({})
   }
 
   const createNewSession = async () => {
     if (!user) return
-    try {
-      const { data, error } = await supabase
-        .from('chat_sessions')
-        .insert({ user_id: user.id, title: 'New Chat' })
-        .select().single()
-      if (error) throw error
-      setSessions([data, ...sessions])
-      navigate(`/chat/${data.id}`)
-    } catch (err) {
-      console.error('Error creating session:', err)
-    }
+    const { data } = await supabase.from('chat_sessions').insert({ user_id: user.id, title: 'New Chat' }).select().single()
+    if (!data) return
+    setSessions([data, ...sessions])
+    navigate(`/chat/${data.id}`)
   }
 
   const deleteSession = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation()
-    try {
-      await supabase.from('chat_messages').delete().eq('session_id', id)
-      await supabase.from('chat_sessions').delete().eq('id', id)
-      setSessions(prev => prev.filter(s => s.id !== id))
-      if (currentSession?.id === id) { setCurrentSession(null); setMessages([]); navigate('/chat') }
-    } catch (err) {
-      console.error('Error deleting session:', err)
-    }
+    await supabase.from('chat_messages').delete().eq('session_id', id)
+    await supabase.from('chat_sessions').delete().eq('id', id)
+    setSessions(prev => prev.filter(s => s.id !== id))
+    if (currentSession?.id === id) { setCurrentSession(null); setMessages([]); navigate('/chat') }
   }
 
-  const simulateStreaming = useCallback(async (fullContent: string, sources: string[], sid: string) => {
-    const words = fullContent.split(' ')
-    let currentContent = ''
-    const tempId = `streaming-${Date.now()}`
-
-    setStreamingMessage({ id: tempId, content: '', isComplete: false, sources })
-
-    return new Promise<void>((resolve) => {
-      let wordIndex = 0
-      streamIntervalRef.current = window.setInterval(() => {
-        if (wordIndex < words.length) {
-          currentContent += (wordIndex > 0 ? ' ' : '') + words[wordIndex]
-          setStreamingMessage({ id: tempId, content: currentContent, isComplete: false, sources })
-          wordIndex++
-        } else {
-          if (streamIntervalRef.current) clearInterval(streamIntervalRef.current)
-          setStreamingMessage({ id: tempId, content: currentContent, isComplete: true, sources })
-
-          setTimeout(async () => {
-            try {
-              const { data: aiMsg, error: aiError } = await supabase
-                .from('chat_messages')
-                .insert({ session_id: sid, role: 'assistant', content: fullContent })
-                .select().single()
-              if (!aiError && aiMsg) setMessages(prev => [...prev, aiMsg])
-            } catch (err) {
-              console.error('Error saving AI message:', err)
-            }
-            setStreamingMessage(null)
-            resolve()
-          }, 500)
-        }
-      }, 35)
-    })
-  }, [])
-
-  const handleSendMessage = async () => {
-    if (!inputMessage.trim() || !currentSession || loading || !user) return
-    const userMessage = inputMessage.trim()
+  const handleSend = async () => {
+    if (!inputMessage.trim() || !currentSession || loading) return
+    const query = inputMessage.trim()
     setInputMessage('')
     setLoading(true)
 
-    try {
-      const { data: userMsg, error: userError } = await supabase
-        .from('chat_messages')
-        .insert({ session_id: currentSession.id, role: 'user', content: userMessage })
-        .select().single()
-      if (userError) throw userError
-      setMessages(prev => [...prev, userMsg])
+    // Save user message
+    const { data: userMsg } = await supabase.from('chat_messages').insert({ session_id: currentSession.id, role: 'user', content: query }).select().single()
+    if (!userMsg) { setLoading(false); return }
+    setMessages(prev => [...prev, userMsg])
 
-      if (messages.length === 0) {
-        const title = userMessage.substring(0, 50)
-        await supabase.from('chat_sessions')
-          .update({ title, updated_at: new Date().toISOString() })
-          .eq('id', currentSession.id)
-        setCurrentSession({ ...currentSession, title })
-        setSessions(prev => prev.map(s => s.id === currentSession.id ? { ...s, title } : s))
-      } else {
-        await supabase.from('chat_sessions')
-          .update({ updated_at: new Date().toISOString() })
-          .eq('id', currentSession.id)
-      }
-
-      const aiResponse = getAIResponse(userMessage)
-      await simulateStreaming(aiResponse.content, aiResponse.sources || [], currentSession.id)
-    } catch (err) {
-      console.error('Error sending message:', err)
-    } finally {
-      setLoading(false)
+    // Update session title
+    if (messages.length === 0) {
+      const title = query.slice(0, 52) + (query.length > 52 ? '…' : '')
+      await supabase.from('chat_sessions').update({ title, updated_at: new Date().toISOString() }).eq('id', currentSession.id)
+      setCurrentSession({ ...currentSession, title })
+      setSessions(prev => prev.map(s => s.id === currentSession.id ? { ...s, title } : s))
+    } else {
+      await supabase.from('chat_sessions').update({ updated_at: new Date().toISOString() }).eq('id', currentSession.id)
     }
+
+    // Start agentic pipeline
+    const workflow = matchPipeline(query)
+    setLiveWorkflow({ userMsgId: userMsg.id, workflow, done: false })
+    setLoading(false)
+  }
+
+  const handleWorkflowComplete = async (synthesis: string) => {
+    if (!currentSession || !liveWorkflow) return
+    // Persist synthesis to Supabase — shown as PlainAssistantMsg on future session loads
+    await supabase.from('chat_messages').insert({ session_id: currentSession.id, role: 'assistant', content: synthesis })
+    // Move this pipeline to the permanent done map so it stays visible in the conversation
+    const { userMsgId, workflow } = liveWorkflow
+    setDonePipelines(prev => ({ ...prev, [userMsgId]: workflow }))
+    // Clear liveWorkflow so a new investigation can start
+    setLiveWorkflow(null)
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage() }
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() }
   }
 
-  // ─── Render ───────────────────────────────────────────────────────────────
+  // ─── Render ──────────────────────────────────────────────────────────────────
   return (
-    <div className="flex h-[calc(100vh-4rem)]" style={{ background: 'var(--bg-base)' }}>
+    <div style={{ display: 'flex', height: '100%', background: '#0d0f14' }}>
 
-      {/* Sidebar */}
-      <div className="flex-shrink-0 flex flex-col transition-all duration-200 overflow-hidden"
-        style={{ width: sidebarOpen ? 260 : 0, background: 'var(--bg-surface)', borderRight: '1px solid var(--border)' }}>
-        <div className="p-3 flex flex-col gap-2 flex-shrink-0" style={{ borderBottom: '1px solid var(--border)' }}>
-          <button onClick={createNewSession}
-            className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-sm font-medium transition-colors"
-            style={{ background: 'var(--accent)', color: '#fff' }}>
-            <Plus className="h-4 w-4" /> New Chat
+      {/* Session Sidebar */}
+      <div style={{ width: sidebarOpen ? 260 : 0, minWidth: sidebarOpen ? 260 : 0, overflow: 'hidden', transition: 'all 0.2s', background: '#111318', borderRight: '1px solid #1f2133', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ padding: '0.75rem', borderBottom: '1px solid #1f2133', flexShrink: 0 }}>
+          <button onClick={createNewSession} style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', padding: '0.625rem', borderRadius: 9, border: 'none', background: '#6366f1', color: '#fff', cursor: 'pointer', fontWeight: 600, fontSize: '0.875rem' }}>
+            <Plus style={{ width: 15, height: 15 }} /> New Chat
           </button>
         </div>
-        <div className="flex-1 overflow-y-auto p-2 space-y-0.5">
+        <div style={{ flex: 1, overflowY: 'auto', padding: '0.5rem' }}>
           {sessions.length === 0 && (
-            <div className="text-center py-8">
-              <MessageSquare className="h-6 w-6 mx-auto mb-2" style={{ color: 'var(--text-muted)' }} />
-              <p className="text-xs" style={{ color: 'var(--text-muted)' }}>No chats yet</p>
+            <div style={{ textAlign: 'center', padding: '2rem 1rem' }}>
+              <MessageSquare style={{ width: 24, height: 24, color: '#374151', margin: '0 auto 0.5rem' }} />
+              <p style={{ fontSize: '0.75rem', color: '#4b5563' }}>No chats yet</p>
             </div>
           )}
-          {sessions.map(session => (
-            <button key={session.id} onClick={() => navigate(`/chat/${session.id}`)}
-              className="w-full text-left px-3 py-2.5 rounded-lg group flex items-center gap-2 transition-colors"
-              style={{ background: currentSession?.id === session.id ? 'var(--accent-light)' : 'transparent' }}
-              onMouseEnter={e => { if (currentSession?.id !== session.id) e.currentTarget.style.background = 'var(--bg-elevated)' }}
-              onMouseLeave={e => { if (currentSession?.id !== session.id) e.currentTarget.style.background = 'transparent' }}>
-              <MessageSquare className="h-3.5 w-3.5 flex-shrink-0" style={{ color: currentSession?.id === session.id ? 'var(--accent)' : 'var(--text-muted)' }} />
-              <div className="flex-1 min-w-0">
-                <p className="text-xs font-medium truncate" style={{ color: 'var(--text-primary)' }}>{session.title}</p>
-                <p className="text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>
-                  {timeAgo(session.updated_at)}
-                </p>
+          {sessions.map(s => (
+            <button key={s.id} onClick={() => navigate(`/chat/${s.id}`)} style={{ width: '100%', textAlign: 'left', padding: '0.625rem 0.75rem', borderRadius: 8, border: 'none', background: currentSession?.id === s.id ? 'rgba(99,102,241,0.15)' : 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: 2 }}
+              onMouseOver={e => { if (currentSession?.id !== s.id) e.currentTarget.style.background = '#1f2133' }}
+              onMouseOut={e => { if (currentSession?.id !== s.id) e.currentTarget.style.background = 'transparent' }}
+            >
+              <MessageSquare style={{ width: 13, height: 13, flexShrink: 0, color: currentSession?.id === s.id ? '#6366f1' : '#374151' }} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <p style={{ fontSize: '0.78rem', fontWeight: 500, color: '#d1d5db', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', margin: 0 }}>{s.title}</p>
+                <p style={{ fontSize: '0.68rem', color: '#4b5563', margin: 0 }}>{timeAgo(s.updated_at)}</p>
               </div>
-              <button onClick={e => deleteSession(e, session.id)}
-                className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded"
-                style={{ color: 'var(--text-muted)' }}>
-                <Trash2 className="h-3 w-3" />
+              <button onClick={e => deleteSession(e, s.id)} style={{ padding: '0.2rem', borderRadius: 5, border: 'none', background: 'transparent', color: '#374151', cursor: 'pointer', opacity: 0, flexShrink: 0 }}
+                onMouseOver={e => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.color = '#f87171' }}
+                onMouseOut={e => { e.currentTarget.style.opacity = '0'; e.currentTarget.style.color = '#374151' }}
+              >
+                <Trash2 style={{ width: 11, height: 11 }} />
               </button>
             </button>
           ))}
         </div>
       </div>
 
-      {/* Main chat area */}
-      <div className="flex-1 flex flex-col overflow-hidden">
+      {/* Main Chat Area */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+
         {/* Topbar */}
-        <div className="flex items-center gap-3 px-4 py-3 flex-shrink-0" style={{ borderBottom: '1px solid var(--border)', background: 'var(--bg-surface)' }}>
-          <button onClick={() => setSidebarOpen(o => !o)} className="p-1.5 rounded-lg transition-colors"
-            style={{ color: 'var(--text-muted)' }}
-            onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-elevated)'}
-            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-            <ChevronLeft className="h-4 w-4 transition-transform" style={{ transform: sidebarOpen ? 'none' : 'rotate(180deg)' }} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.75rem 1rem', borderBottom: '1px solid #1f2133', background: '#111318', flexShrink: 0 }}>
+          <button onClick={() => setSidebarOpen(o => !o)} style={{ padding: '0.375rem', borderRadius: 7, border: 'none', background: 'transparent', color: '#4b5563', cursor: 'pointer' }}
+            onMouseOver={e => e.currentTarget.style.background = '#1f2133'}
+            onMouseOut={e => e.currentTarget.style.background = 'transparent'}
+          >
+            <ChevronLeft style={{ width: 16, height: 16, transform: sidebarOpen ? 'none' : 'rotate(180deg)', transition: 'transform 0.2s' }} />
           </button>
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: 'var(--accent-light)' }}>
-              <Bot className="h-4 w-4" style={{ color: 'var(--accent)' }} />
-            </div>
-            <div>
-              <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
-                {currentSession ? currentSession.title : 'Operon AI'}
-              </p>
-              <p className="text-[10px]" style={{ color: 'var(--text-muted)' }}>SRE Intelligence · Context-aware</p>
-            </div>
+          <div style={{ width: 30, height: 30, borderRadius: 8, background: 'rgba(99,102,241,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Bot style={{ width: 16, height: 16, color: '#6366f1' }} />
+          </div>
+          <div>
+            <p style={{ fontSize: '0.875rem', fontWeight: 700, color: '#fff', margin: 0 }}>{currentSession?.title ?? 'Operon AI'}</p>
+            <p style={{ fontSize: '0.68rem', color: '#4b5563', margin: 0 }}>Multi-agent SRE intelligence · {liveWorkflow && !liveWorkflow.done ? '⚡ Agents working...' : 'Ready'}</p>
           </div>
         </div>
 
-        {/* Messages */}
-        <div className="flex-1 overflow-y-auto px-4 py-6 space-y-6" style={{ background: '#0d0f14' }}>
+        {/* Messages area */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '1.5rem 1rem' }}>
           {!currentSession ? (
             /* Welcome screen */
-            <div className="flex flex-col items-center justify-center h-full text-center px-4">
-              <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4" style={{ background: 'rgba(99,102,241,0.15)' }}>
-                <Sparkles className="h-8 w-8" style={{ color: '#6366f1' }} />
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', textAlign: 'center', padding: '2rem' }}>
+              <div style={{ width: 64, height: 64, borderRadius: 18, background: 'rgba(99,102,241,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '1.25rem' }}>
+                <Sparkles style={{ width: 30, height: 30, color: '#6366f1' }} />
               </div>
-              <h2 className="text-xl font-bold mb-2" style={{ color: '#fff' }}>Operon AI Assistant</h2>
-              <p className="text-sm mb-8 max-w-sm" style={{ color: '#9ca3af' }}>
-                Ask about incidents, correlate events, get remediation suggestions, or analyze system health.
-              </p>
-              <div className="grid grid-cols-2 gap-2 w-full max-w-md">
+              <h2 style={{ fontSize: '1.375rem', fontWeight: 800, color: '#fff', marginBottom: '0.5rem' }}>Operon AI</h2>
+              <p style={{ fontSize: '0.875rem', color: '#6b7280', maxWidth: 420, marginBottom: '0.5rem' }}>Multi-agent SRE intelligence. Ask about incidents and Operon will plan, dispatch specialized agents, and synthesize findings in real time.</p>
+              <p style={{ fontSize: '0.78rem', color: '#374151', marginBottom: '2rem' }}>Powered by: Sentinel · Arbiter · Navigator · Cortex · Patcher</p>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: '0.625rem', width: '100%', maxWidth: 520 }}>
                 {QUICK_PROMPTS.map(p => (
-                  <button key={p.label} onClick={() => { createNewSession(); setInputMessage(p.prompt) }}
-                    className="text-left px-4 py-3 rounded-xl text-xs transition-colors"
-                    style={{ background: '#161821', border: '1px solid #1f2133', color: '#a1a1aa' }}
-                    onMouseEnter={e => { e.currentTarget.style.borderColor = '#6366f1'; e.currentTarget.style.color = '#fff' }}
-                    onMouseLeave={e => { e.currentTarget.style.borderColor = '#1f2133'; e.currentTarget.style.color = '#a1a1aa' }}>
-                    {p.label}
-                  </button>
+                  <button key={p.label} onClick={() => { createNewSession().then(() => setInputMessage(p.prompt)) }} style={{ textAlign: 'left', padding: '0.75rem 1rem', borderRadius: 12, border: '1px solid #1f2133', background: '#161821', color: '#9ca3af', cursor: 'pointer', fontSize: '0.8rem', lineHeight: 1.4 }}
+                    onMouseOver={e => { e.currentTarget.style.borderColor = '#6366f1'; e.currentTarget.style.color = '#fff' }}
+                    onMouseOut={e => { e.currentTarget.style.borderColor = '#1f2133'; e.currentTarget.style.color = '#9ca3af' }}
+                  >{p.label}</button>
                 ))}
               </div>
             </div>
-          ) : messages.length === 0 && !streamingMessage ? (
+          ) : messages.length === 0 && !liveWorkflow ? (
             /* Empty session */
-            <div className="flex flex-col items-center justify-center h-full text-center">
-              <Bot className="h-10 w-10 mb-3" style={{ color: '#374151' }} />
-              <p className="text-sm font-medium mb-1" style={{ color: '#9ca3af' }}>How can I help you?</p>
-              <p className="text-xs mb-6" style={{ color: '#4b5563' }}>Ask about current incidents, metrics, or request an investigation</p>
-              <div className="flex flex-wrap gap-2 justify-center max-w-lg">
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', textAlign: 'center' }}>
+              <Bot style={{ width: 40, height: 40, color: '#1f2937', marginBottom: '0.75rem' }} />
+              <p style={{ fontSize: '0.875rem', color: '#6b7280', marginBottom: '0.25rem' }}>What do you need investigated?</p>
+              <p style={{ fontSize: '0.78rem', color: '#374151', marginBottom: '1.5rem' }}>Operon will plan and dispatch the right agents automatically</p>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', justifyContent: 'center', maxWidth: 560 }}>
                 {QUICK_PROMPTS.map(p => (
-                  <button key={p.label} onClick={() => setInputMessage(p.prompt)}
-                    className="text-xs px-3 py-1.5 rounded-full transition-colors"
-                    style={{ background: '#161821', border: '1px solid #1f2133', color: '#a1a1aa' }}
-                    onMouseEnter={e => { e.currentTarget.style.background = 'rgba(99,102,241,0.12)'; e.currentTarget.style.color = '#6366f1'; e.currentTarget.style.borderColor = 'rgba(99,102,241,0.3)' }}
-                    onMouseLeave={e => { e.currentTarget.style.background = '#161821'; e.currentTarget.style.color = '#a1a1aa'; e.currentTarget.style.borderColor = '#1f2133' }}>
-                    {p.label}
-                  </button>
+                  <button key={p.label} onClick={() => setInputMessage(p.prompt)} style={{ fontSize: '0.75rem', padding: '0.375rem 0.875rem', borderRadius: 20, border: '1px solid #1f2133', background: '#161821', color: '#9ca3af', cursor: 'pointer' }}
+                    onMouseOver={e => { e.currentTarget.style.background = 'rgba(99,102,241,0.12)'; e.currentTarget.style.color = '#a5b4fc'; e.currentTarget.style.borderColor = 'rgba(99,102,241,0.3)' }}
+                    onMouseOut={e => { e.currentTarget.style.background = '#161821'; e.currentTarget.style.color = '#9ca3af'; e.currentTarget.style.borderColor = '#1f2133' }}
+                  >{p.label}</button>
                 ))}
               </div>
             </div>
           ) : (
-            <>
-              {messages.map(message => (
-                <div key={message.id} className={`flex gap-3 ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                  {message.role === 'assistant' && (
-                    <div className="flex-shrink-0 w-7 h-7 rounded-lg flex items-center justify-center mt-0.5" style={{ background: 'rgba(99,102,241,0.2)' }}>
-                      <Bot className="h-3.5 w-3.5" style={{ color: '#6366f1' }} />
-                    </div>
-                  )}
-                  <div className={`max-w-2xl ${message.role === 'user' ? 'ml-12' : 'mr-12'}`}>
-                    <div className="rounded-xl px-4 py-3"
-                      style={message.role === 'user'
-                        ? { background: '#6366f1', color: '#fff' }
-                        : { background: '#161821', border: '1px solid #1f2133' }}>
-                      {message.role === 'assistant'
-                        ? <MessageContent content={message.content} />
-                        : <p className="text-sm" style={{ color: '#fff' }}>{message.content}</p>}
-                    </div>
-                    <p className="text-[10px] mt-1 px-1" style={{ color: '#4b5563' }}>
-                      {timeAgo(message.created_at)}
-                    </p>
-                  </div>
-                  {message.role === 'user' && (
-                    <div className="flex-shrink-0 w-7 h-7 rounded-lg flex items-center justify-center mt-0.5" style={{ background: '#1f2937' }}>
-                      <User className="h-3.5 w-3.5" style={{ color: '#9ca3af' }} />
-                    </div>
-                  )}
-                </div>
-              ))}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', maxWidth: 780, margin: '0 auto' }}>
+              {messages.map((msg, idx) => {
+                // Which kind of result does this message have?
+                const donePipeline = msg.role === 'user' ? donePipelines[msg.id] : undefined
+                const isLiveTarget  = liveWorkflow?.userMsgId === msg.id
 
-              {/* Streaming message */}
-              {streamingMessage && (
-                <div className="flex gap-3 justify-start">
-                  <div className="flex-shrink-0 w-7 h-7 rounded-lg flex items-center justify-center mt-0.5" style={{ background: 'rgba(99,102,241,0.2)' }}>
-                    <Bot className="h-3.5 w-3.5" style={{ color: '#6366f1' }} />
-                  </div>
-                  <div className="max-w-2xl mr-12">
-                    <div className="rounded-xl px-4 py-3" style={{ background: '#161821', border: '1px solid #1f2133' }}>
-                      <MessageContent content={streamingMessage.content} streaming={!streamingMessage.isComplete} />
-                      {!streamingMessage.content && <div className="flex items-center gap-1 py-1">
-                        {[0, 1, 2].map(i => <span key={i} className="w-1.5 h-1.5 rounded-full animate-bounce" style={{ background: '#4b5563', animationDelay: `${i * 0.15}s`, animationDuration: '0.8s' }} />)}
-                      </div>}
-                    </div>
-                    {streamingMessage.sources && streamingMessage.sources.length > 0 && streamingMessage.isComplete && (
-                      <div className="flex flex-wrap gap-1.5 mt-2 px-1">
-                        <span className="text-[10px]" style={{ color: '#4b5563' }}>Sources:</span>
-                        {streamingMessage.sources.map((source, idx) => (
-                          <span key={idx} className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full" style={{ background: '#1f2937', border: '1px solid #374151', color: '#9ca3af' }}>
-                            {getSourceIcon(source)} {source}
-                          </span>
-                        ))}
+                // Skip rendering an assistant plain-text message if the user message
+                // before it has a done pipeline (pipeline card shows the result instead).
+                // On future session reloads (no liveWorkflow/donePipelines), it renders normally.
+                const prevMsg = idx > 0 ? messages[idx - 1] : null
+                const prevHasPipeline = prevMsg && (!!donePipelines[prevMsg.id] || liveWorkflow?.userMsgId === prevMsg.id)
+                const skipAssistant = msg.role === 'assistant' && !!prevHasPipeline
+
+                return (
+                  <div key={msg.id}>
+                    {/* ── User bubble ── */}
+                    {msg.role === 'user' && (
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.625rem', alignItems: 'flex-start' }}>
+                        <div style={{ maxWidth: '72%', background: '#6366f1', borderRadius: '14px 14px 4px 14px', padding: '0.75rem 1rem' }}>
+                          <p style={{ fontSize: '0.875rem', color: '#fff', margin: 0 }}>{msg.content}</p>
+                        </div>
+                        <div style={{ width: 28, height: 28, borderRadius: 8, background: '#1f2937', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                          <User style={{ width: 14, height: 14, color: '#9ca3af' }} />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* ── Historical assistant message (plain text, shown on reload) ── */}
+                    {!skipAssistant && msg.role === 'assistant' && (
+                      <div style={{ display: 'flex', gap: '0.625rem', alignItems: 'flex-start' }}>
+                        <div style={{ width: 28, height: 28, borderRadius: 8, background: 'rgba(99,102,241,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                          <Bot style={{ width: 14, height: 14, color: '#6366f1' }} />
+                        </div>
+                        <div style={{ flex: 1, background: '#161821', border: '1px solid #1f2133', borderRadius: '4px 14px 14px 14px', padding: '0.875rem 1rem' }}>
+                          <PlainAssistantMsg content={msg.content} />
+                          <p style={{ fontSize: '0.65rem', color: '#374151', margin: '0.5rem 0 0' }}>{timeAgo(msg.created_at)} · Operon AI</p>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* ── DONE pipeline — permanent result card, stays in chat forever ── */}
+                    {donePipeline && (
+                      <div style={{ marginTop: '0.75rem', display: 'flex', gap: '0.625rem', alignItems: 'flex-start' }}>
+                        <div style={{ width: 28, height: 28, borderRadius: 8, background: 'rgba(99,102,241,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 2 }}>
+                          <Bot style={{ width: 14, height: 14, color: '#6366f1' }} />
+                        </div>
+                        <PastInvestigationCard
+                          pipeline={donePipeline}
+                          onFollowUp={(text) => setInputMessage(text)}
+                        />
+                      </div>
+                    )}
+
+                    {/* ── LIVE pipeline — animated, running right now ── */}
+                    {isLiveTarget && liveWorkflow && (
+                      <div style={{ marginTop: '0.75rem', display: 'flex', gap: '0.625rem', alignItems: 'flex-start' }}>
+                        <div style={{ width: 28, height: 28, borderRadius: 8, background: 'rgba(99,102,241,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 2 }}>
+                          <Bot style={{ width: 14, height: 14, color: '#6366f1' }} />
+                        </div>
+                        <InvestigationPipeline
+                          pipeline={liveWorkflow.workflow}
+                          onComplete={handleWorkflowComplete}
+                          onFollowUp={(text) => setInputMessage(text)}
+                        />
                       </div>
                     )}
                   </div>
-                </div>
-              )}
-
-              {/* Loading spinner */}
-              {loading && !streamingMessage && (
-                <div className="flex gap-3 justify-start">
-                  <div className="flex-shrink-0 w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: 'rgba(99,102,241,0.2)' }}>
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" style={{ color: '#6366f1' }} />
-                  </div>
-                  <div className="rounded-xl px-4 py-3" style={{ background: '#161821', border: '1px solid #1f2133' }}>
-                    <p className="text-xs" style={{ color: '#6b7280' }}>Analyzing your request…</p>
-                  </div>
-                </div>
-              )}
+                )
+              })}
               <div ref={messagesEndRef} />
-            </>
+            </div>
           )}
         </div>
 
         {/* Input bar */}
-        <div className="flex-shrink-0 p-4" style={{ background: '#0d0f14', borderTop: '1px solid #1f2133' }}>
-          <div className="flex gap-2 items-end max-w-4xl mx-auto">
+        <div style={{ padding: '1rem', borderTop: '1px solid #1f2133', background: '#0d0f14', flexShrink: 0 }}>
+          <div style={{ display: 'flex', gap: '0.625rem', alignItems: 'flex-end', maxWidth: 780, margin: '0 auto' }}>
             <textarea ref={inputRef} rows={1} value={inputMessage}
               onChange={e => setInputMessage(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder={currentSession ? 'Ask about incidents, metrics, or request an investigation…' : 'Start a new chat first'}
-              disabled={loading || !currentSession}
-              className="flex-1 resize-none rounded-xl px-4 py-3 text-sm outline-none transition-colors"
-              style={{ background: '#161821', border: '1px solid #1f2133', color: '#e5e7eb', minHeight: 44, maxHeight: 200 }}
+              disabled={loading || !currentSession || (!!liveWorkflow && !liveWorkflow.done)}
+              placeholder={!currentSession ? 'Start a new chat first' : (liveWorkflow && !liveWorkflow.done) ? '⚡ Agents are investigating...' : 'Ask about incidents, metrics, or request an investigation…'}
+              style={{ flex: 1, resize: 'none', borderRadius: 12, padding: '0.75rem 1rem', fontSize: '0.875rem', background: '#161821', border: '1px solid #1f2133', color: '#e5e7eb', outline: 'none', minHeight: 44, maxHeight: 160, opacity: (!currentSession || (!!liveWorkflow && !liveWorkflow.done)) ? 0.5 : 1 }}
               onFocus={e => e.currentTarget.style.borderColor = '#6366f1'}
-              onBlur={e => e.currentTarget.style.borderColor = '#1f2133'} />
-            <button onClick={handleSendMessage}
-              disabled={!inputMessage.trim() || loading || !currentSession}
-              className="flex-shrink-0 w-11 h-11 rounded-xl flex items-center justify-center transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-              style={{ background: '#6366f1' }}>
-              <Send className="h-4 w-4" style={{ color: '#fff' }} />
+              onBlur={e => e.currentTarget.style.borderColor = '#1f2133'}
+            />
+            <button onClick={handleSend}
+              disabled={!inputMessage.trim() || loading || !currentSession || (!!liveWorkflow && !liveWorkflow.done)}
+
+              style={{ width: 44, height: 44, borderRadius: 12, border: 'none', background: '#6366f1', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, opacity: (!inputMessage.trim() || loading || !currentSession) ? 0.4 : 1, transition: 'opacity 0.15s' }}>
+              <Send style={{ width: 16, height: 16 }} />
             </button>
           </div>
-          <p className="text-center text-[10px] mt-2" style={{ color: '#374151' }}>
-            Press Enter to send · Shift+Enter for new line
+          <p style={{ textAlign: 'center', fontSize: '0.65rem', color: '#1f2937', marginTop: '0.5rem' }}>
+            Enter to send · Shift+Enter for new line · Operon dispatches specialized agents per query
           </p>
         </div>
       </div>

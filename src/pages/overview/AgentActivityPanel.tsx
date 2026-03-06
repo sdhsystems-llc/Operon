@@ -19,46 +19,41 @@ export const AgentActivityPanel = () => {
   const activeCount = AGENTS.filter((a) => a.status === 'active').length;
 
   return (
-    <div className="card flex flex-col h-full">
-      <div className="p-5 flex items-center justify-between flex-shrink-0" style={{ borderBottom: '1px solid var(--border)' }}>
+    <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 14, display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+      <div style={{ padding: '0.625rem 0.875rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
         <div>
-          <h3 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>AI Agents</h3>
-          <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>{activeCount} of {AGENTS.length} active</p>
+          <p style={{ fontWeight: 700, fontSize: '0.8rem', color: 'var(--text-primary)', margin: 0 }}>AI Agents</p>
+          <p style={{ fontSize: '0.68rem', color: 'var(--text-muted)', margin: 0 }}>{activeCount} of {AGENTS.length} active</p>
         </div>
-        <span className="flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full"
-          style={{ background: 'rgba(16,185,129,0.1)', color: '#34d399', border: '1px solid rgba(16,185,129,0.2)' }}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.65rem', fontWeight: 700, background: 'rgba(16,185,129,0.1)', color: '#34d399', border: '1px solid rgba(16,185,129,0.2)', borderRadius: 20, padding: '0.2rem 0.5rem' }}>
           <span className="w-1.5 h-1.5 rounded-full animate-pulse bg-[#10b981]" />
           Live
         </span>
       </div>
 
-      <div className="flex-1 divide-y" style={{ borderColor: 'var(--border)' }}>
+      <div style={{ flex: 1, overflowY: 'auto' }}>
         {AGENTS.map((agent) => {
           const cfg = statusConfig[agent.status];
           return (
-            <div key={agent.id} className="flex items-start gap-3 px-5 py-3.5 transition-colors"
+            <div key={agent.id} style={{ display: 'flex', alignItems: 'flex-start', gap: '0.625rem', padding: '0.5rem 0.875rem', borderBottom: '1px solid var(--border)', transition: 'background 0.15s', cursor: 'default' }}
               onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.background = 'var(--bg-elevated)'; }}
               onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.background = 'transparent'; }}>
-              <div className="relative flex-shrink-0 mt-0.5">
-                <span className="block w-2.5 h-2.5 rounded-full" style={{ background: cfg.dot }} />
-                {cfg.pulse && (
-                  <span className="absolute inset-0 rounded-full animate-ping opacity-60" style={{ background: cfg.dot }} />
-                )}
+              <div style={{ position: 'relative', flexShrink: 0, marginTop: 3 }}>
+                <span style={{ display: 'block', width: 8, height: 8, borderRadius: '50%', background: cfg.dot }} />
+                {cfg.pulse && <span style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: cfg.dot, animation: 'agPing 1s infinite', opacity: 0.6 }} />}
               </div>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-sm font-medium truncate" style={{ color: 'var(--text-primary)' }}>{agent.name}</p>
-                  <span className="flex-shrink-0 text-xs font-medium px-1.5 py-0.5 rounded"
-                    style={{ background: cfg.bgColor, color: cfg.textColor }}>
-                    {cfg.label}
-                  </span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.375rem' }}>
+                  <p style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-primary)', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{agent.name}</p>
+                  <span style={{ flexShrink: 0, fontSize: '0.62rem', fontWeight: 700, background: cfg.bgColor, color: cfg.textColor, padding: '0.1rem 0.35rem', borderRadius: 4 }}>{cfg.label}</span>
                 </div>
-                <p className="text-xs mt-0.5 truncate" style={{ color: 'var(--text-muted)' }}>{agent.task}</p>
+                <p style={{ fontSize: '0.67rem', color: 'var(--text-muted)', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{agent.task}</p>
               </div>
             </div>
           );
         })}
       </div>
+      <style>{`@keyframes agPing{0%{transform:scale(1);opacity:0.6}100%{transform:scale(2.2);opacity:0}}`}</style>
     </div>
   );
 };

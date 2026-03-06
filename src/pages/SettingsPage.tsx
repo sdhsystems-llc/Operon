@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useAuth } from '../contexts/AuthContext'
+import { useAuth } from '../context/AuthContext'
 import { supabase } from '../lib/supabase'
 import { User, Building2, Bell, Shield, Key } from 'lucide-react'
 
@@ -31,7 +31,8 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="p-6 max-w-4xl mx-auto">
+    <div className="h-full overflow-y-auto">
+    <div className="p-6 w-full">
       <div className="mb-6">
         <h1 className="text-xl font-semibold text-white">Settings</h1>
         <p className="text-sm text-gray-400 mt-0.5">Manage your account and preferences</p>
@@ -168,6 +169,7 @@ export default function SettingsPage() {
           )}
         </div>
       </div>
+    </div>
     </div>
   )
 }
